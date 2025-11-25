@@ -1,1 +1,65 @@
+# config.yaml - scanner configuration (change these values later)
+mode: actions-only         # actions-only | local-only | hybrid
 
+# timeframes
+tf_primary: "5m"
+tf_confirm: "15m"
+swing_timeframes: ["30m","1h"]
+
+# scanning
+max_symbols_scan: 200
+min_volume_usd: 200000
+watchlist: []              # used by ws_worker when you add it
+
+# indicators
+ema_fast: 20
+ema_slow: 50
+rsi_len: 14
+rsi_low: 35
+rsi_high: 75
+vol_sma: 20
+vol_mult: 1.5
+atr_len: 14
+min_move_pct: 0.5
+min_move_atr_mult: 0.3
+
+# scoring weights (tune later)
+weights:
+  ema_align: 15
+  macd: 10
+  rsi: 10
+  vol_spike: 12
+  breakout: 15
+  retest: 20
+  candle: 8
+  divergence: 12
+  orderbook: 12
+mtf_weights:
+  ema: 8
+  macd: 6
+  vol: 6
+
+# context adjustments
+context:
+  btc_align: 15
+  btc_oppose: -30
+  btc_vol_penalty: -15
+  btcd_fall: 10
+  btcd_rise: -20
+  usdtd_fall: 10
+  usdtd_rise: -40
+  funding_bonus: 8
+
+# thresholds & cooldown
+alert_threshold_aggressive: 65
+alert_threshold_high: 95
+cooldown_minutes: 30
+
+# logging / storage
+data_folder: data
+alerts_log: data/alerts.json
+
+# telegram (env-driven)
+telegram:
+  enabled: true
+  # bot token & chat id read from env / github secrets
