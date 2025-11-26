@@ -7,7 +7,7 @@ from pathlib import Path
 import requests
 import yaml
 
-from src.indicators import ema, rsi, atr, macd_hist  # (not fully used yet)
+from src.indicators import ema, rsi, atr, macd_hist  # indicators module
 from src.scoring import score_signal
 from .mexc_client import fetch_klines
 
@@ -42,7 +42,6 @@ def main():
     print("🚀 Alt-Scanner starting...")
 
     config = load_config()
-
     print("📄 Config loaded.")
 
     # ===============================
@@ -58,7 +57,7 @@ def main():
         # RSI(14)
         btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
 
-        # ATR(14)
+        # ATR(14) – note: this ATR expects the full DataFrame
         btc_5m_candles["atr14"] = atr(btc_5m_candles, 14)
 
         # MACD histogram
@@ -73,10 +72,31 @@ def main():
             .to_string(index=False)
         )
 
+        # ===============================
+        # Simple feature flags on LAST candle
+        # ===============================
+
+        # Volume SMA(20) for spike detection
+        btc_5m_candles["vol_sma20"] = (
+            btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
+        )
+
+        last = btc_5m_candles.iloc[-1]
+        last_vol_sma20 = btc_5m_candles["vol_sma20"].iloc[-1]
+
+        # Basic rules (can refine later)
+        ema_align = (last["close"] > last["ema20"] > last["ema50"])
+        macd_pos = last["macd_hist"] > 0
+        vol_spike = last["volume"] > last_vol_sma20 * 1.5  # 1.5x volume spike
+
+        print("\n🧩 Feature flags on last BTC_USDT 5m candle:")
+        print(f"ema_align: {ema_align}")
+        print(f"macd_pos: {macd_pos}")
+        print(f"vol_spike: {vol_spike}")
+
     except Exception as e:
         print(f"❌ MEXC fetch failed: {e}")
         return
-
 
     # ===============================
     # Dummy signal (placeholder)
