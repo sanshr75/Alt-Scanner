@@ -16,6 +16,7 @@ import yaml
 
 from src.indicators import ema, rsi, atr, macd_hist  # not used yet, but we'll need them soon
 from src.scoring import score_signal
+from .mexc_client import fetch_klines
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
