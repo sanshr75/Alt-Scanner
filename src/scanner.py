@@ -103,25 +103,42 @@ def analyze_symbol(symbol: str, config: dict):
         last_atr = float(candles["atr14"].iloc[-1])
         last_close = float(last["close"])
 
+        # Bullish side conditions (5m)
         ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
+
+        # Bearish side conditions (5m)
+        ema_down = last["close"] < last["ema20"] < last["ema50"]
+        macd_neg = last["macd_hist"] < 0
+
         vol_spike = last["volume"] > last_vol_sma20 * 1.5
 
     except Exception as e:
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # 15m confirmation
+    # 15m confirmation (bullish only for now)
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
         print(f"⚠ 15m confirm failed for {symbol}: {e}")
         tf15_confirm = False
 
-    print(f"🔍 5m → ema_align={ema_align}, macd_pos={macd_pos}, vol_spike={vol_spike}")
-    print(f"📌 15m confirm: {tf15_confirm}")
+    print(
+        f"🔍 5m → ema_align={ema_align}, macd_pos={macd_pos}, "
+        f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}"
+    )
+    print(f"📌 15m confirm (bullish): {tf15_confirm}")
 
-    # -------- Manual base_score (simple, transparent) --------
+    # Determine side
+    if ema_align and macd_pos:
+        side = "BUY"
+    elif ema_down and macd_neg:
+        side = "SELL"
+    else:
+        side = "NONE"
+
+    # -------- Manual base_score (still bullish-weighted for now) --------
     base_score = 0
     if ema_align:
         base_score += 10
@@ -137,7 +154,7 @@ def analyze_symbol(symbol: str, config: dict):
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
-        "mtf_ema_align": bool(tf15_confirm),  # reuse key expected by scoring.py
+        "mtf_ema_align": bool(tf15_confirm),
         "ctx_adj": 0,
         "tags": [
             tag
@@ -151,7 +168,6 @@ def analyze_symbol(symbol: str, config: dict):
         ],
     }
 
-    # Call central scoring module (uses config.yaml weights)
     try:
         scores = score_signal(features_for_scoring, config)
         final_score = int(scores.get("final_score", base_score))
@@ -163,8 +179,7 @@ def analyze_symbol(symbol: str, config: dict):
 
     print(f"📈 Base score: {base_score}")
     print(f"📈 Final score (after scoring.py): {final_score} / threshold {threshold}")
-
-    side = "BUY" if ema_align and macd_pos else "NONE"
+    print(f"📌 Decided side: {side}")
 
     # Default levels = None
     entry = None
@@ -172,6 +187,7 @@ def analyze_symbol(symbol: str, config: dict):
     tp1 = None
     tp2 = None
 
+    # BUILD LEVELS depending on side
     if side == "BUY":
         atr_mult_sl = 1.5
         atr_mult_tp1 = 2.0
@@ -181,6 +197,16 @@ def analyze_symbol(symbol: str, config: dict):
         sl = entry - last_atr * atr_mult_sl
         tp1 = entry + last_atr * atr_mult_tp1
         tp2 = entry + last_atr * atr_mult_tp2
+
+    elif side == "SELL":
+        atr_mult_sl = 1.5
+        atr_mult_tp1 = 2.0
+        atr_mult_tp2 = 3.0
+
+        entry = last_close
+        sl = entry + last_atr * atr_mult_sl
+        tp1 = entry - last_atr * atr_mult_tp1
+        tp2 = entry - last_atr * atr_mult_tp2
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
@@ -205,15 +231,21 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚪ {symbol} below threshold or no direction — no alert.")
         return
 
-    # Alert message
+    # Alert message with direction
+    levels_str = ""
+    if entry is not None:
+        levels_str = (
+            f"Entry: {entry:.4f}\n"
+            f"SL: {sl:.4f}\n"
+            f"TP1: {tp1:.4f}\n"
+            f"TP2: {tp2:.4f}\n"
+        )
+
     text = (
         f"📡 Alert: {symbol} (5m)\n"
-        f"Score: {final_score} / {threshold}\n"
         f"Side: {side}\n"
-        f"Entry: {entry:.4f}\n"
-        f"SL: {sl:.4f}\n"
-        f"TP1: {tp1:.4f}\n"
-        f"TP2: {tp2:.4f}\n"
+        f"Score: {final_score} / {threshold}\n"
+        f"{levels_str}"
         f"Tags: {', '.join(features_for_scoring['tags']) if features_for_scoring['tags'] else 'None'}"
     )
 
