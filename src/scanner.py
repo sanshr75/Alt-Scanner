@@ -44,27 +44,24 @@ def log_signal(data: dict):
     DATA_DIR.mkdir(exist_ok=True)
     filename = DATA_DIR / f"alerts-{datetime.utcnow().strftime('%Y%m%d')}.json"
 
-    entry = json.dumps(data)
+    safe = {
+        k: (bool(v) if isinstance(v, (pd.BooleanDtype, bool)) else v)
+        for k, v in data.items()
+    }
 
     with filename.open("a", encoding="utf-8") as f:
-        f.write(entry + "\n")
+        f.write(json.dumps(safe) + "\n")
 
     print(f"🗂 Logged → {filename.name}")
 
 
-def main():
+def analyze_symbol(symbol: str, config: dict):
+    print(f"\n================= {symbol} =================")
 
-    print("🚀 Alt-Scanner starting...")
-
-    config = load_config()
-    print("📄 Config loaded.")
-
-    # ===============================
-    # Fetch data from MEXC
-    # ===============================
     try:
-        candles = fetch_klines("BTC_USDT", "5m", 50)
+        candles = fetch_klines(symbol, "5m", 50)
 
+        # Indicators
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
         candles["rsi14"] = rsi(candles["close"], 14)
@@ -79,18 +76,12 @@ def main():
         macd_pos = last["macd_hist"] > 0
         vol_spike = last["volume"] > last_vol_sma20 * 1.5
 
-        print("\n🧩 Feature flags:")
-        print(f"ema_align: {ema_align}")
-        print(f"macd_pos: {macd_pos}")
-        print(f"vol_spike: {vol_spike}")
+        print(f"🔍 ema_align={ema_align} | macd_pos={macd_pos} | vol_spike={vol_spike}")
 
     except Exception as e:
-        print(f"❌ MEXC fetch failed: {e}")
+        print(f"❌ API error for {symbol}: {e}")
         return
 
-    # ===============================
-    # Build dataset
-    # ===============================
     features = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
@@ -106,49 +97,51 @@ def main():
         ]
     }
 
-    # Score
     scores = score_signal(features, config)
-    final_score = scores.get("final_score", 0)
+    final_score = int(scores.get("final_score", 0))
     threshold = config.get("alert_threshold_aggressive", 65)
 
-    print("\n📈 Scoring:")
-    print(f"final_score: {final_score}")
-    print(f"alert_threshold: {threshold}")
+    print(f"📈 Score: {final_score} / threshold {threshold}")
 
     side = "BUY" if ema_align and macd_pos else "NONE"
 
-    # Build log object
     record = {
         "timestamp": datetime.utcnow().isoformat(),
-        "symbol": "BTC_USDT",
-        "score": int(final_score),
-        "side": str(side),
-        "tags": [str(t) for t in features["tags"]],
+        "symbol": symbol,
+        "score": final_score,
+        "side": side,
+        "tags": features["tags"],
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
     }
 
-
-    # Save it
     log_signal(record)
 
-    # Check if alert needed
     if final_score < threshold:
-        print("⚪ Below threshold → no alert.")
+        print(f"⚪ {symbol} → below threshold, no alert.")
         return
 
-    # Build signal message
-    text = (
-        "📡 Alt-Scanner Live Alert\n"
-        f"Symbol: BTC_USDT\n"
-        f"Score: {final_score} (min {threshold})\n"
+    msg = (
+        f"📡 Signal Detected\n"
+        f"{symbol} | 5m\n"
+        f"Score: {final_score}\n"
         f"Signal: {side}\n"
-        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}\n"
-        f"\nRaw: {json.dumps(record)}"
+        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}"
     )
 
-    send_telegram(text)
+    send_telegram(msg)
+
+
+def main():
+    print("🚀 Alt-Scanner Start")
+
+    config = load_config()
+
+    symbols = ["BTC_USDT", "ETH_USDT", "SOL_USDT"]  # expandable later
+
+    for symbol in symbols:
+        analyze_symbol(symbol, config)
 
 
 if __name__ == "__main__":
