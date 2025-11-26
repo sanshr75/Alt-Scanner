@@ -60,10 +60,10 @@ def main():
 
         # ATR(14)
         btc_5m_candles["atr14"] = atr(
-            high=btc_5m_candles["high"],
-            low=btc_5m_candles["low"],
-            close=btc_5m_candles["close"],
-            length=14
+            btc_5m_candles["high"],
+            btc_5m_candles["low"],
+            btc_5m_candles["close"],
+            14
         )
 
         # MACD histogram
