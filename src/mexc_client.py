@@ -2,7 +2,7 @@
 
 import requests
 import pandas as pd
-from typing import Optional, List
+from typing import Optional
 
 BASE_URL = "https://api.mexc.com"
 
@@ -23,7 +23,7 @@ def fetch_klines(
     """
     Fetch historical klines from MEXC Spot API and return a standardized OHLCV DataFrame.
 
-    Columns:
+    Standardized columns:
         timestamp (datetime64[ns])
         open (float)
         high (float)
@@ -44,38 +44,39 @@ def fetch_klines(
     response.raise_for_status()
     raw = response.json()
 
-    # MEXC /api/v3/klines returns list of:
-    # [
-    #   [
-    #     openTime, open, high, low, close, volume,
-    #     closeTime, quoteAssetVolume, numberOfTrades,
-    #     takerBuyBaseAssetVolume, takerBuyQuoteAssetVolume, ignore
-    #   ], ...
-    # ]
-    columns = [
-        "open_time",
-        "open",
-        "high",
-        "low",
-        "close",
-        "volume",
-        "close_time",
-        "quote_asset_volume",
-        "number_of_trades",
-        "taker_buy_base",
-        "taker_buy_quote",
-        "ignore",
-    ]
+    if not raw:
+        raise ValueError("No kline data returned from MEXC")
 
-    df = pd.DataFrame(raw, columns=columns)
+    # MEXC is returning a list of lists.
+    # Each inner list has (at least) the first 6 items in this order:
+    # 0: openTime (ms)
+    # 1: open
+    # 2: high
+    # 3: low
+    # 4: close
+    # 5: volume
+    #
+    # There may be more items after that, but we don't need them now.
+    df = pd.DataFrame(raw)
 
-    # Convert types
-    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms")
+    # Convert types using positional columns
+    df[0] = pd.to_datetime(df[0], unit="ms")  # openTime
+    df[1] = df[1].astype(float)  # open
+    df[2] = df[2].astype(float)  # high
+    df[3] = df[3].astype(float)  # low
+    df[4] = df[4].astype(float)  # close
+    df[5] = df[5].astype(float)  # volume
 
-    for col in ["open", "high", "low", "close", "volume"]:
-        df[col] = df[col].astype(float)
-
-    # Standardized schema for the rest of the project
-    df = df.rename(columns={"open_time": "timestamp"})
+    # Standardize column names for the rest of the project
+    df = df.rename(
+        columns={
+            0: "timestamp",
+            1: "open",
+            2: "high",
+            3: "low",
+            4: "close",
+            5: "volume",
+        }
+    )
 
     return df[["timestamp", "open", "high", "low", "close", "volume"]]
