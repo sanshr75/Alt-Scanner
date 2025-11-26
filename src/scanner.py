@@ -59,12 +59,7 @@ def main():
         btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
 
         # ATR(14)
-        btc_5m_candles["atr14"] = atr(
-            btc_5m_candles["high"],
-            btc_5m_candles["low"],
-            btc_5m_candles["close"],
-            14
-        )
+        btc_5m_candles["atr14"] = atr(btc_5m_candles, 14)
 
         # MACD histogram
         btc_5m_candles["macd_hist"] = macd_hist(btc_5m_candles["close"])
