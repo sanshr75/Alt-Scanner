@@ -52,11 +52,21 @@ def log_signal(data: dict):
 
 def compute_tf_features(symbol, interval):
     """
-    Fetches a timeframe and returns:
-    ema_align flag and macd_pos flag
+    Fetches a timeframe and returns combined EMA + MACD alignment flag.
+    Fixes interval format to match MEXC API.
     """
 
-    candles = fetch_klines(symbol, interval, 50)
+    interval_map = {
+        "5m": "5m",
+        "15m": "15m",
+        "1h": "1H",
+        "4h": "4H",
+        "1d": "1D",
+    }
+
+    mapped_interval = interval_map.get(interval, interval)
+
+    candles = fetch_klines(symbol, mapped_interval, 50)
 
     candles["ema20"] = ema(candles["close"], 20)
     candles["ema50"] = ema(candles["close"], 50)
