@@ -6,8 +6,9 @@ from pathlib import Path
 
 import requests
 import yaml
+import pandas as pd
 
-from src.indicators import ema, rsi, atr, macd_hist  # indicators module
+from src.indicators import ema, rsi, atr, macd_hist
 from src.scoring import score_signal
 from .mexc_client import fetch_klines
 
@@ -26,7 +27,7 @@ def send_telegram(text: str):
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
 
     if not bot_token or not chat_id:
-        print("⚠ Telegram variables missing. Message printed instead:")
+        print("⚠ Telegram variables missing. Printing message instead:")
         print(text)
         return
 
@@ -45,51 +46,39 @@ def main():
     print("📄 Config loaded.")
 
     # ===============================
-    # Fetch live candles from MEXC
+    # Fetch candles from MEXC
     # ===============================
     try:
-        btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
+        btc_5m_candles = fetch_klines("BTC_USDT", "5m", 50)
 
-        # EMA calculations
+        # Indicators
         btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
         btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
-
-        # RSI(14)
         btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
-
-        # ATR(14) – note: this ATR expects the full DataFrame
         btc_5m_candles["atr14"] = atr(btc_5m_candles, 14)
-
-        # MACD histogram
         btc_5m_candles["macd_hist"] = macd_hist(btc_5m_candles["close"])
 
-        print("\n📊 BTC_USDT latest 5m candles with EMA, RSI, ATR, MACD Histogram:")
+        # Volume SMA for spike detection
+        btc_5m_candles["vol_sma20"] = btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
+
+        print("\n📊 BTC_USDT last 5 rows:")
         print(
             btc_5m_candles[
                 ["timestamp", "close", "ema20", "ema50", "rsi14", "atr14", "macd_hist"]
-            ]
-            .tail()
-            .to_string(index=False)
+            ].tail().to_string(index=False)
         )
 
         # ===============================
-        # Simple feature flags on LAST candle
+        # Feature flags (last candle only)
         # ===============================
-
-        # Volume SMA(20) for spike detection
-        btc_5m_candles["vol_sma20"] = (
-            btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
-        )
-
         last = btc_5m_candles.iloc[-1]
         last_vol_sma20 = btc_5m_candles["vol_sma20"].iloc[-1]
 
-        # Basic rules (can refine later)
-        ema_align = (last["close"] > last["ema20"] > last["ema50"])
+        ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
-        vol_spike = last["volume"] > last_vol_sma20 * 1.5  # 1.5x volume spike
+        vol_spike = last["volume"] > last_vol_sma20 * 1.5
 
-        print("\n🧩 Feature flags on last BTC_USDT 5m candle:")
+        print("\n🧩 Feature flags:")
         print(f"ema_align: {ema_align}")
         print(f"macd_pos: {macd_pos}")
         print(f"vol_spike: {vol_spike}")
@@ -99,56 +88,52 @@ def main():
         return
 
     # ===============================
-# Real feature payload from live market
-# ===============================
-features = {
-    "ema_align": bool(ema_align),
-    "macd_pos": bool(macd_pos),
-    "vol_spike": bool(vol_spike),
+    # Build REAL feature payload
+    # ===============================
+    features = {
+        "ema_align": bool(ema_align),
+        "macd_pos": bool(macd_pos),
+        "vol_spike": bool(vol_spike),
 
-    # placeholders for now (future steps: multi-tf + BTC context)
-    "mtf_ema_align": False,
-    "ctx_adj": 0,
+        # placeholders (future steps)
+        "mtf_ema_align": False,
+        "ctx_adj": 0,
 
-    "tags": [
-        tag for tag, val in {
-            "EMA_TREND": ema_align,
-            "MACD_MOMENTUM": macd_pos,
-            "VOLUME_SPIKE": vol_spike,
-        }.items() if val is True
-    ]
-}
+        "tags": [
+            tag for tag, val in {
+                "EMA_TREND": ema_align,
+                "MACD_MOMENTUM": macd_pos,
+                "VOLUME_SPIKE": vol_spike,
+            }.items() if val is True
+        ]
+    }
 
-
+    # ===============================
+    # Score the setup
+    # ===============================
     scores = score_signal(features, config)
 
+    # ===============================
+    # Build test formatted message
+    # ===============================
     fake_payload = {
-        "id": "TEST|BUY|000000",
-        "symbol": "TESTUSDT",
+        "id": "LIVE|TEST|BTC_USDT",
+        "symbol": "BTC_USDT",
         "exchange": "MEXC",
-        "side": "BUY",
-        "tf": config.get("tf_primary", "5m"),
-        "entry": 1.2345,
-        "sl": 1.1111,
-        "tp1": 1.3333,
-        "tp2": 1.4444,
-        "final_score": scores["final_score"],
-        "base_score": scores["base_score"],
-        "mtf_score": scores["mtf_score"],
-        "ctx_adj": scores["ctx_adj"],
-        "tags": scores["tags"],
+        "tf": "5m",
+        "side": "BUY" if ema_align and macd_pos else "NONE",
+        "final_score": scores.get("final_score", 0),
+        "tags": features["tags"],
     }
 
     text = (
-        "🧪 Alt-Scanner test signal\n"
-        f"Symbol: {fake_payload['symbol']} | Side: {fake_payload['side']}\n"
-        f"TF: {fake_payload['tf']}\n"
-        f"Entry: {fake_payload['entry']} | SL: {fake_payload['sl']} | "
-        f"TP1: {fake_payload['tp1']} | TP2: {fake_payload['tp2']}\n"
-        f"Score: {fake_payload['final_score']} "
-        f"(base={fake_payload['base_score']}, mtf={fake_payload['mtf_score']}, ctx={fake_payload['ctx_adj']})\n"
-        f"Tags: {', '.join(fake_payload['tags'])}\n\n"
-        f"raw: {json.dumps(fake_payload)}"
+        "📡 Alt-Scanner Live Check\n"
+        f"Symbol: {fake_payload['symbol']}\n"
+        f"Timeframe: {fake_payload['tf']}\n"
+        f"Score: {fake_payload['final_score']}\n"
+        f"Signal: {fake_payload['side']}\n"
+        f"Tags: {', '.join(fake_payload['tags']) if fake_payload['tags'] else 'None'}\n"
+        f"\nRaw: {json.dumps(fake_payload)}"
     )
 
     send_telegram(text)
