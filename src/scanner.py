@@ -44,15 +44,30 @@ def log_signal(data: dict):
     DATA_DIR.mkdir(exist_ok=True)
     filename = DATA_DIR / f"alerts-{datetime.utcnow().strftime('%Y%m%d')}.json"
 
-    safe = {
-        k: (bool(v) if isinstance(v, (pd.BooleanDtype, bool)) else v)
-        for k, v in data.items()
-    }
-
     with filename.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(safe) + "\n")
+        f.write(json.dumps(data) + "\n")
 
     print(f"🗂 Logged → {filename.name}")
+
+
+def compute_tf_features(symbol, interval):
+    """
+    Fetches a timeframe and returns:
+    ema_align flag and macd_pos flag
+    """
+
+    candles = fetch_klines(symbol, interval, 50)
+
+    candles["ema20"] = ema(candles["close"], 20)
+    candles["ema50"] = ema(candles["close"], 50)
+    candles["macd_hist"] = macd_hist(candles["close"])
+
+    last = candles.iloc[-1]
+
+    ema_align = last["close"] > last["ema20"] > last["ema50"]
+    macd_pos = last["macd_hist"] > 0
+
+    return bool(ema_align and macd_pos)
 
 
 def analyze_symbol(symbol: str, config: dict):
@@ -61,11 +76,8 @@ def analyze_symbol(symbol: str, config: dict):
     try:
         candles = fetch_klines(symbol, "5m", 50)
 
-        # Indicators
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
-        candles["rsi14"] = rsi(candles["close"], 14)
-        candles["atr14"] = atr(candles, 14)
         candles["macd_hist"] = macd_hist(candles["close"])
         candles["vol_sma20"] = candles["volume"].rolling(20, min_periods=1).mean()
 
@@ -76,61 +88,76 @@ def analyze_symbol(symbol: str, config: dict):
         macd_pos = last["macd_hist"] > 0
         vol_spike = last["volume"] > last_vol_sma20 * 1.5
 
-        print(f"🔍 ema_align={ema_align} | macd_pos={macd_pos} | vol_spike={vol_spike}")
-
     except Exception as e:
-        print(f"❌ API error for {symbol}: {e}")
+        print(f"❌ Fetch error for {symbol}: {e}")
         return
 
+    # ---- NEW MULTI-TF LOGIC ----
+    tf15_align = compute_tf_features(symbol, "15m")
+    tf1h_align = compute_tf_features(symbol, "1h")
+
+    print(f"🔍 5m: {ema_align}, {macd_pos}, {vol_spike}")
+    print(f"📌 15m confirm: {tf15_align}")
+    print(f"📌 1h confirm: {tf1h_align}")
+
+    # Build features
     features = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
-        "mtf_ema_align": False,
-        "ctx_adj": 0,
+
+        # new multi timeframe confirmations
+        "mtf15": bool(tf15_align),
+        "mtf1h": bool(tf1h_align),
+
         "tags": [
             tag for tag, v in {
-                "EMA_TREND": ema_align,
-                "MACD_MOMENTUM": macd_pos,
-                "VOLUME_SPIKE": vol_spike,
+                "EMA": ema_align,
+                "MACD": macd_pos,
+                "VOL": vol_spike,
+                "TF15": tf15_align,
+                "TF1H": tf1h_align,
             }.items() if v
         ]
     }
 
-    scores = score_signal(features, config)
-    final_score = int(scores.get("final_score", 0))
+    base_score = 0
+    if ema_align: base_score += 10
+    if macd_pos: base_score += 10
+    if vol_spike: base_score += 5
+
+    if tf15_align: base_score += 10
+    if tf1h_align: base_score += 20
+
+    final_score = base_score
     threshold = config.get("alert_threshold_aggressive", 65)
 
-    print(f"📈 Score: {final_score} / threshold {threshold}")
+    print(f"📈 Final score: {final_score} / threshold {threshold}")
 
     side = "BUY" if ema_align and macd_pos else "NONE"
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
         "symbol": symbol,
-        "score": final_score,
+        "final_score": final_score,
         "side": side,
         "tags": features["tags"],
-        "ema_align": bool(ema_align),
-        "macd_pos": bool(macd_pos),
-        "vol_spike": bool(vol_spike),
     }
 
     log_signal(record)
 
     if final_score < threshold:
-        print(f"⚪ {symbol} → below threshold, no alert.")
+        print(f"⚪ {symbol} below threshold — no alert.")
         return
 
-    msg = (
-        f"📡 Signal Detected\n"
-        f"{symbol} | 5m\n"
+    text = (
+        f"📡 Alert: {symbol}\n"
         f"Score: {final_score}\n"
-        f"Signal: {side}\n"
-        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}"
+        f"Side: {side}\n"
+        f"Tags: {', '.join(features['tags'])}"
     )
 
-    send_telegram(msg)
+    send_telegram(text)
 
 
 def main():
@@ -138,7 +165,7 @@ def main():
 
     config = load_config()
 
-    symbols = ["BTC_USDT", "ETH_USDT", "SOL_USDT"]  # expandable later
+    symbols = ["BTC_USDT", "ETH_USDT", "SOL_USDT"]
 
     for symbol in symbols:
         analyze_symbol(symbol, config)
