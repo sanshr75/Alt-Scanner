@@ -50,23 +50,12 @@ def log_signal(data: dict):
     print(f"🗂 Logged → {filename.name}")
 
 
-def compute_tf_features(symbol, interval):
+def compute_tf15_confirm(symbol: str) -> bool:
     """
-    Fetches a timeframe and returns combined EMA + MACD alignment flag.
-    Fixes interval format to match MEXC API.
+    Fetch 15m timeframe and return a simple trend-confirm flag.
+    close > ema20 > ema50 AND macd_hist > 0
     """
-
-    interval_map = {
-        "5m": "5m",
-        "15m": "15m",
-        "1h": "1H",
-        "4h": "4H",
-        "1d": "1D",
-    }
-
-    mapped_interval = interval_map.get(interval, interval)
-
-    candles = fetch_klines(symbol, mapped_interval, 50)
+    candles = fetch_klines(symbol, "15m", 50)
 
     candles["ema20"] = ema(candles["close"], 20)
     candles["ema50"] = ema(candles["close"], 50)
@@ -74,10 +63,10 @@ def compute_tf_features(symbol, interval):
 
     last = candles.iloc[-1]
 
-    ema_align = last["close"] > last["ema20"] > last["ema50"]
-    macd_pos = last["macd_hist"] > 0
+    ema_align_15 = last["close"] > last["ema20"] > last["ema50"]
+    macd_pos_15 = last["macd_hist"] > 0
 
-    return bool(ema_align and macd_pos)
+    return bool(ema_align_15 and macd_pos_15)
 
 
 def analyze_symbol(symbol: str, config: dict):
@@ -102,42 +91,45 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # ---- NEW MULTI-TF LOGIC ----
-    tf15_align = compute_tf_features(symbol, "15m")
-    tf1h_align = compute_tf_features(symbol, "1h")
+    # ---- 15m confirmation only (for now) ----
+    try:
+        tf15_confirm = compute_tf15_confirm(symbol)
+    except Exception as e:
+        print(f"⚠ 15m confirm failed for {symbol}: {e}")
+        tf15_confirm = False
 
-    print(f"🔍 5m: {ema_align}, {macd_pos}, {vol_spike}")
-    print(f"📌 15m confirm: {tf15_align}")
-    print(f"📌 1h confirm: {tf1h_align}")
+    print(f"🔍 5m → ema_align={ema_align}, macd_pos={macd_pos}, vol_spike={vol_spike}")
+    print(f"📌 15m confirm: {tf15_confirm}")
 
-    # Build features
+    # Build feature payload
     features = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
-
-        # new multi timeframe confirmations
-        "mtf15": bool(tf15_align),
-        "mtf1h": bool(tf1h_align),
-
+        "mtf15": bool(tf15_confirm),
+        "ctx_adj": 0,
         "tags": [
-            tag for tag, v in {
+            tag
+            for tag, v in {
                 "EMA": ema_align,
                 "MACD": macd_pos,
                 "VOL": vol_spike,
-                "TF15": tf15_align,
-                "TF1H": tf1h_align,
-            }.items() if v
-        ]
+                "TF15": tf15_confirm,
+            }.items()
+            if v
+        ],
     }
 
+    # Simple hand-made scoring layer on top
     base_score = 0
-    if ema_align: base_score += 10
-    if macd_pos: base_score += 10
-    if vol_spike: base_score += 5
-
-    if tf15_align: base_score += 10
-    if tf1h_align: base_score += 20
+    if ema_align:
+        base_score += 10
+    if macd_pos:
+        base_score += 10
+    if vol_spike:
+        base_score += 5
+    if tf15_confirm:
+        base_score += 15  # bonus for HTF alignment
 
     final_score = base_score
     threshold = config.get("alert_threshold_aggressive", 65)
@@ -164,7 +156,7 @@ def analyze_symbol(symbol: str, config: dict):
         f"📡 Alert: {symbol}\n"
         f"Score: {final_score}\n"
         f"Side: {side}\n"
-        f"Tags: {', '.join(features['tags'])}"
+        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}"
     )
 
     send_telegram(text)
