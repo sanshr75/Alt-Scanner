@@ -99,16 +99,26 @@ def main():
         return
 
     # ===============================
-    # Dummy signal (placeholder)
-    # ===============================
-    features = {
-        "ema_align": True,
-        "macd_pos": True,
-        "vol_spike": True,
-        "mtf_ema_align": True,
-        "ctx_adj": 0,
-        "tags": ["TEST_SIGNAL", "DUMMY_DATA"],
-    }
+# Real feature payload from live market
+# ===============================
+features = {
+    "ema_align": bool(ema_align),
+    "macd_pos": bool(macd_pos),
+    "vol_spike": bool(vol_spike),
+
+    # placeholders for now (future steps: multi-tf + BTC context)
+    "mtf_ema_align": False,
+    "ctx_adj": 0,
+
+    "tags": [
+        tag for tag, val in {
+            "EMA_TREND": ema_align,
+            "MACD_MOMENTUM": macd_pos,
+            "VOLUME_SPIKE": vol_spike,
+        }.items() if val is True
+    ]
+}
+
 
     scores = score_signal(features, config)
 
