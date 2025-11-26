@@ -121,13 +121,14 @@ def main():
     record = {
         "timestamp": datetime.utcnow().isoformat(),
         "symbol": "BTC_USDT",
-        "score": final_score,
-        "side": side,
-        "tags": features["tags"],
-        "ema_align": ema_align,
-        "macd_pos": macd_pos,
-        "vol_spike": vol_spike,
+        "score": int(final_score),
+        "side": str(side),
+        "tags": [str(t) for t in features["tags"]],
+        "ema_align": bool(ema_align),
+        "macd_pos": bool(macd_pos),
+        "vol_spike": bool(vol_spike),
     }
+
 
     # Save it
     log_signal(record)
