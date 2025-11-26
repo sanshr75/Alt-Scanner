@@ -51,19 +51,32 @@ def main():
     try:
         btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
 
-        # EMA calculations
-        btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
-        btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
+       # EMA calculations
+btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
+btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
 
-        # RSI(14) calculation
-        btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
+# RSI(14)
+btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
 
-        print("\n📊 BTC_USDT latest 5m candles with EMA(20/50) and RSI(14):")
-        print(
-            btc_5m_candles[["timestamp", "close", "ema20", "ema50", "rsi14"]]
-            .tail()
-            .to_string(index=False)
-        )
+# ATR(14)
+btc_5m_candles["atr14"] = atr(
+    high=btc_5m_candles["high"],
+    low=btc_5m_candles["low"],
+    close=btc_5m_candles["close"],
+    length=14
+)
+
+# MACD histogram (12,26,9 default)
+btc_5m_candles["macd_hist"] = macd_hist(btc_5m_candles["close"])
+
+print("\n📊 BTC_USDT latest 5m candles with EMA, RSI, ATR, MACD Histogram:")
+print(
+    btc_5m_candles[
+        ["timestamp", "close", "ema20", "ema50", "rsi14", "atr14", "macd_hist"]
+    ]
+    .tail()
+    .to_string(index=False)
+)
 
     except Exception as e:
         print(f"❌ MEXC fetch failed: {e}")
