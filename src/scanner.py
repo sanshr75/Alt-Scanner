@@ -3,6 +3,7 @@
 import os
 import json
 from pathlib import Path
+from datetime import datetime
 
 import requests
 import yaml
@@ -14,6 +15,7 @@ from .mexc_client import fetch_klines
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
 
 
 def load_config():
@@ -38,6 +40,18 @@ def send_telegram(text: str):
     print("Telegram status:", resp.status_code, resp.text)
 
 
+def log_signal(data: dict):
+    DATA_DIR.mkdir(exist_ok=True)
+    filename = DATA_DIR / f"alerts-{datetime.utcnow().strftime('%Y%m%d')}.json"
+
+    entry = json.dumps(data)
+
+    with filename.open("a", encoding="utf-8") as f:
+        f.write(entry + "\n")
+
+    print(f"🗂 Logged → {filename.name}")
+
+
 def main():
 
     print("🚀 Alt-Scanner starting...")
@@ -46,37 +60,20 @@ def main():
     print("📄 Config loaded.")
 
     # ===============================
-    # Fetch candles from MEXC
+    # Fetch data from MEXC
     # ===============================
     try:
-        btc_5m_candles = fetch_klines("BTC_USDT", "5m", 50)
+        candles = fetch_klines("BTC_USDT", "5m", 50)
 
-        # Indicators
-        btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
-        btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
-        btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
-        btc_5m_candles["atr14"] = atr(btc_5m_candles, 14)
-        btc_5m_candles["macd_hist"] = macd_hist(btc_5m_candles["close"])
+        candles["ema20"] = ema(candles["close"], 20)
+        candles["ema50"] = ema(candles["close"], 50)
+        candles["rsi14"] = rsi(candles["close"], 14)
+        candles["atr14"] = atr(candles, 14)
+        candles["macd_hist"] = macd_hist(candles["close"])
+        candles["vol_sma20"] = candles["volume"].rolling(20, min_periods=1).mean()
 
-        # Volume SMA for spike detection
-        btc_5m_candles["vol_sma20"] = (
-            btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
-        )
-
-        print("\n📊 BTC_USDT last 5 rows:")
-        print(
-            btc_5m_candles[
-                ["timestamp", "close", "ema20", "ema50", "rsi14", "atr14", "macd_hist"]
-            ]
-            .tail()
-            .to_string(index=False)
-        )
-
-        # ===============================
-        # Feature flags (last candle only)
-        # ===============================
-        last = btc_5m_candles.iloc[-1]
-        last_vol_sma20 = btc_5m_candles["vol_sma20"].iloc[-1]
+        last = candles.iloc[-1]
+        last_vol_sma20 = candles["vol_sma20"].iloc[-1]
 
         ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
@@ -92,71 +89,62 @@ def main():
         return
 
     # ===============================
-    # Build REAL feature payload
+    # Build dataset
     # ===============================
     features = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
-
-        # placeholders (future steps)
         "mtf_ema_align": False,
         "ctx_adj": 0,
-
         "tags": [
-            tag
-            for tag, val in {
+            tag for tag, v in {
                 "EMA_TREND": ema_align,
                 "MACD_MOMENTUM": macd_pos,
                 "VOLUME_SPIKE": vol_spike,
-            }.items()
-            if val is True
-        ],
+            }.items() if v
+        ]
     }
 
-    # ===============================
-    # Score the setup
-    # ===============================
+    # Score
     scores = score_signal(features, config)
     final_score = scores.get("final_score", 0)
+    threshold = config.get("alert_threshold_aggressive", 65)
 
-    # Read threshold from config (fallback = 50)
-    alert_threshold = config.get("alert_threshold_aggressive", 50)
-
-    print(f"\n📈 Scoring:")
+    print("\n📈 Scoring:")
     print(f"final_score: {final_score}")
-    print(f"alert_threshold_aggressive: {alert_threshold}")
+    print(f"alert_threshold: {threshold}")
 
-    # ===============================
-    # Decide if we should send an alert
-    # ===============================
-    if final_score < alert_threshold:
-        print("⚪ Score below threshold → no Telegram alert sent.")
-        return
-
-    # ===============================
-    # Build formatted alert message
-    # ===============================
     side = "BUY" if ema_align and macd_pos else "NONE"
 
-    payload = {
-        "id": "LIVE|TEST|BTC_USDT",
+    # Build log object
+    record = {
+        "timestamp": datetime.utcnow().isoformat(),
         "symbol": "BTC_USDT",
-        "exchange": "MEXC",
-        "tf": "5m",
+        "score": final_score,
         "side": side,
-        "final_score": final_score,
         "tags": features["tags"],
+        "ema_align": ema_align,
+        "macd_pos": macd_pos,
+        "vol_spike": vol_spike,
     }
 
+    # Save it
+    log_signal(record)
+
+    # Check if alert needed
+    if final_score < threshold:
+        print("⚪ Below threshold → no alert.")
+        return
+
+    # Build signal message
     text = (
         "📡 Alt-Scanner Live Alert\n"
-        f"Symbol: {payload['symbol']}\n"
-        f"Timeframe: {payload['tf']}\n"
-        f"Score: {payload['final_score']} (threshold={alert_threshold})\n"
-        f"Signal: {payload['side']}\n"
-        f"Tags: {', '.join(payload['tags']) if payload['tags'] else 'None'}\n"
-        f"\nRaw: {json.dumps(payload)}"
+        f"Symbol: BTC_USDT\n"
+        f"Score: {final_score} (min {threshold})\n"
+        f"Signal: {side}\n"
+        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}\n"
+        f"\nRaw: {json.dumps(record)}"
     )
 
     send_telegram(text)
