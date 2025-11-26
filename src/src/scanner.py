@@ -14,8 +14,8 @@ from pathlib import Path
 import requests
 import yaml
 
-from indicators import ema, rsi, atr, macd_hist  # not used yet, but we'll need them soon
-from scoring import score_signal
+from src.indicators import ema, rsi, atr, macd_hist  # not used yet, but we'll need them soon
+from src.scoring import score_signal
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
