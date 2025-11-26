@@ -43,6 +43,29 @@ def send_telegram(text: str):
 
 
 def main():
+    def main():
+    # Existing code: config loading, etc.
+    # ------------------------------------------------
+    # For example:
+    # config = load_config()
+    # ...
+
+    # --- New: Fetch and inspect BTC_USDT 5m candles from MEXC ---
+    try:
+        btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
+        print("[MEXC] Fetched BTC_USDT 5m candles:")
+        # Print just the last few rows to keep CI logs readable
+        print(btc_5m_candles.tail().to_string(index=False))
+    except Exception as e:
+        # Do not kill the whole pipeline yet; just log the problem.
+        print(f"[MEXC] Error fetching BTC_USDT klines: {e}")
+
+    # ------------------------------------------------
+    # Existing dummy signal / scoring / Telegram logic continues here
+    # (do NOT remove it yet; we will gradually replace it in later steps)
+    # ------------------------------------------------
+    # ... rest of your existing main() ...
+
     config = load_config()
 
     # --- fake features just to test scoring + telegram wiring ---
