@@ -1,11 +1,4 @@
 # src/scanner.py
-"""
-First minimal scanner step:
-- Load config.yaml
-- Build a fake "signal" using the scoring module
-- Send it to Telegram using the same bot you already wired
-This is just to prove the pipeline: config -> scoring -> telegram works.
-"""
 
 import os
 import json
@@ -14,7 +7,7 @@ from pathlib import Path
 import requests
 import yaml
 
-from src.indicators import ema, rsi, atr, macd_hist  # not used yet, but we'll need them soon
+from src.indicators import ema, rsi, atr, macd_hist  # (not fully used yet)
 from src.scoring import score_signal
 from .mexc_client import fetch_klines
 
@@ -31,44 +24,51 @@ def load_config():
 def send_telegram(text: str):
     bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
     chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+
     if not bot_token or not chat_id:
-        print("Telegram env vars missing, cannot send message.")
+        print("⚠ Telegram variables missing. Message printed instead:")
         print(text)
         return
 
     url = f"https://api.telegram.org/bot{bot_token}/sendMessage"
     payload = {"chat_id": chat_id, "text": text}
+
     resp = requests.post(url, json=payload, timeout=15)
     print("Telegram status:", resp.status_code, resp.text)
 
 
 def main():
-    def main():
-    # Existing code: config loading, etc.
-    # ------------------------------------------------
-    # For example:
-    # config = load_config()
-    # ...
 
-    # --- New: Fetch and inspect BTC_USDT 5m candles from MEXC ---
-    try:
-        btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
-        print("[MEXC] Fetched BTC_USDT 5m candles:")
-        # Print just the last few rows to keep CI logs readable
-        print(btc_5m_candles.tail().to_string(index=False))
-    except Exception as e:
-        # Do not kill the whole pipeline yet; just log the problem.
-        print(f"[MEXC] Error fetching BTC_USDT klines: {e}")
-
-    # ------------------------------------------------
-    # Existing dummy signal / scoring / Telegram logic continues here
-    # (do NOT remove it yet; we will gradually replace it in later steps)
-    # ------------------------------------------------
-    # ... rest of your existing main() ...
+    print("🚀 Alt-Scanner starting...")
 
     config = load_config()
 
-    # --- fake features just to test scoring + telegram wiring ---
+    print("📄 Config loaded.")
+
+    # ===============================
+    # Fetch live candles from MEXC
+    # ===============================
+    try:
+        btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
+
+        # Add EMA calculations (first real filtering logic)
+        btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
+        btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
+
+        print("\n📊 BTC_USDT latest 5m candles with EMA(20/50):")
+        print(
+            btc_5m_candles[["timestamp", "close", "ema20", "ema50"]]
+            .tail()
+            .to_string(index=False)
+        )
+
+    except Exception as e:
+        print(f"❌ MEXC fetch failed: {e}")
+        return
+
+    # ===============================
+    # Dummy signal (placeholder)
+    # ===============================
     features = {
         "ema_align": True,
         "macd_pos": True,
@@ -97,7 +97,6 @@ def main():
         "tags": scores["tags"],
     }
 
-    # compact text message for now
     text = (
         "🧪 Alt-Scanner test signal\n"
         f"Symbol: {fake_payload['symbol']} | Side: {fake_payload['side']}\n"
