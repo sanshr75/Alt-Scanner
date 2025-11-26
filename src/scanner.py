@@ -45,19 +45,22 @@ def main():
 
     print("📄 Config loaded.")
 
-    # ===============================
+        # ===============================
     # Fetch live candles from MEXC
     # ===============================
     try:
         btc_5m_candles = fetch_klines(symbol="BTC_USDT", interval="5m", limit=50)
 
-        # Add EMA calculations (first real filtering logic)
+        # EMA calculations
         btc_5m_candles["ema20"] = ema(btc_5m_candles["close"], 20)
         btc_5m_candles["ema50"] = ema(btc_5m_candles["close"], 50)
 
-        print("\n📊 BTC_USDT latest 5m candles with EMA(20/50):")
+        # RSI(14) calculation
+        btc_5m_candles["rsi14"] = rsi(btc_5m_candles["close"], 14)
+
+        print("\n📊 BTC_USDT latest 5m candles with EMA(20/50) and RSI(14):")
         print(
-            btc_5m_candles[["timestamp", "close", "ema20", "ema50"]]
+            btc_5m_candles[["timestamp", "close", "ema20", "ema50", "rsi14"]]
             .tail()
             .to_string(index=False)
         )
