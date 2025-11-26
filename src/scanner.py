@@ -44,8 +44,25 @@ def log_signal(data: dict):
     DATA_DIR.mkdir(exist_ok=True)
     filename = DATA_DIR / f"alerts-{datetime.utcnow().strftime('%Y%m%d')}.json"
 
+    safe = {
+        "timestamp": str(data.get("timestamp")),
+        "symbol": str(data.get("symbol")),
+        "final_score": int(data.get("final_score", 0)),
+        "base_score": int(data.get("base_score", 0)),
+        "side": str(data.get("side", "NONE")),
+        "tags": [str(t) for t in data.get("tags", [])],
+        "ema_align": bool(data.get("ema_align", False)),
+        "macd_pos": bool(data.get("macd_pos", False)),
+        "vol_spike": bool(data.get("vol_spike", False)),
+        "tf15_confirm": bool(data.get("tf15_confirm", False)),
+        "entry": float(data.get("entry", 0)) if data.get("entry") is not None else None,
+        "sl": float(data.get("sl", 0)) if data.get("sl") is not None else None,
+        "tp1": float(data.get("tp1", 0)) if data.get("tp1") is not None else None,
+        "tp2": float(data.get("tp2", 0)) if data.get("tp2") is not None else None,
+    }
+
     with filename.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(data) + "\n")
+        f.write(json.dumps(safe) + "\n")
 
     print(f"🗂 Logged → {filename.name}")
 
@@ -78,10 +95,13 @@ def analyze_symbol(symbol: str, config: dict):
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
         candles["macd_hist"] = macd_hist(candles["close"])
+        candles["atr14"] = atr(candles, 14)
         candles["vol_sma20"] = candles["volume"].rolling(20, min_periods=1).mean()
 
         last = candles.iloc[-1]
         last_vol_sma20 = candles["vol_sma20"].iloc[-1]
+        last_atr = float(candles["atr14"].iloc[-1])
+        last_close = float(last["close"])
 
         ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
@@ -91,7 +111,7 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # ---- 15m confirmation only (for now) ----
+    # 15m confirmation
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
@@ -101,12 +121,23 @@ def analyze_symbol(symbol: str, config: dict):
     print(f"🔍 5m → ema_align={ema_align}, macd_pos={macd_pos}, vol_spike={vol_spike}")
     print(f"📌 15m confirm: {tf15_confirm}")
 
-    # Build feature payload
-    features = {
+    # -------- Manual base_score (simple, transparent) --------
+    base_score = 0
+    if ema_align:
+        base_score += 10
+    if macd_pos:
+        base_score += 10
+    if vol_spike:
+        base_score += 5
+    if tf15_confirm:
+        base_score += 15
+
+    # -------- Features for central scoring engine --------
+    features_for_scoring = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
-        "mtf15": bool(tf15_confirm),
+        "mtf_ema_align": bool(tf15_confirm),  # reuse key expected by scoring.py
         "ctx_adj": 0,
         "tags": [
             tag
@@ -120,43 +151,70 @@ def analyze_symbol(symbol: str, config: dict):
         ],
     }
 
-    # Simple hand-made scoring layer on top
-    base_score = 0
-    if ema_align:
-        base_score += 10
-    if macd_pos:
-        base_score += 10
-    if vol_spike:
-        base_score += 5
-    if tf15_confirm:
-        base_score += 15  # bonus for HTF alignment
+    # Call central scoring module (uses config.yaml weights)
+    try:
+        scores = score_signal(features_for_scoring, config)
+        final_score = int(scores.get("final_score", base_score))
+    except Exception as e:
+        print(f"⚠ score_signal failed, using base_score only: {e}")
+        final_score = base_score
 
-    final_score = base_score
     threshold = config.get("alert_threshold_aggressive", 65)
 
-    print(f"📈 Final score: {final_score} / threshold {threshold}")
+    print(f"📈 Base score: {base_score}")
+    print(f"📈 Final score (after scoring.py): {final_score} / threshold {threshold}")
 
     side = "BUY" if ema_align and macd_pos else "NONE"
+
+    # Default levels = None
+    entry = None
+    sl = None
+    tp1 = None
+    tp2 = None
+
+    if side == "BUY":
+        atr_mult_sl = 1.5
+        atr_mult_tp1 = 2.0
+        atr_mult_tp2 = 3.0
+
+        entry = last_close
+        sl = entry - last_atr * atr_mult_sl
+        tp1 = entry + last_atr * atr_mult_tp1
+        tp2 = entry + last_atr * atr_mult_tp2
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
         "symbol": symbol,
         "final_score": final_score,
+        "base_score": base_score,
         "side": side,
-        "tags": features["tags"],
+        "tags": features_for_scoring["tags"],
+        "ema_align": ema_align,
+        "macd_pos": macd_pos,
+        "vol_spike": vol_spike,
+        "tf15_confirm": tf15_confirm,
+        "entry": entry,
+        "sl": sl,
+        "tp1": tp1,
+        "tp2": tp2,
     }
 
     log_signal(record)
 
-    if final_score < threshold:
-        print(f"⚪ {symbol} below threshold — no alert.")
+    if final_score < threshold or side == "NONE":
+        print(f"⚪ {symbol} below threshold or no direction — no alert.")
         return
 
+    # Alert message
     text = (
-        f"📡 Alert: {symbol}\n"
-        f"Score: {final_score}\n"
+        f"📡 Alert: {symbol} (5m)\n"
+        f"Score: {final_score} / {threshold}\n"
         f"Side: {side}\n"
-        f"Tags: {', '.join(features['tags']) if features['tags'] else 'None'}"
+        f"Entry: {entry:.4f}\n"
+        f"SL: {sl:.4f}\n"
+        f"TP1: {tp1:.4f}\n"
+        f"TP2: {tp2:.4f}\n"
+        f"Tags: {', '.join(features_for_scoring['tags']) if features_for_scoring['tags'] else 'None'}"
     )
 
     send_telegram(text)
