@@ -59,13 +59,17 @@ def main():
         btc_5m_candles["macd_hist"] = macd_hist(btc_5m_candles["close"])
 
         # Volume SMA for spike detection
-        btc_5m_candles["vol_sma20"] = btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
+        btc_5m_candles["vol_sma20"] = (
+            btc_5m_candles["volume"].rolling(20, min_periods=1).mean()
+        )
 
         print("\n📊 BTC_USDT last 5 rows:")
         print(
             btc_5m_candles[
                 ["timestamp", "close", "ema20", "ema50", "rsi14", "atr14", "macd_hist"]
-            ].tail().to_string(index=False)
+            ]
+            .tail()
+            .to_string(index=False)
         )
 
         # ===============================
@@ -100,40 +104,59 @@ def main():
         "ctx_adj": 0,
 
         "tags": [
-            tag for tag, val in {
+            tag
+            for tag, val in {
                 "EMA_TREND": ema_align,
                 "MACD_MOMENTUM": macd_pos,
                 "VOLUME_SPIKE": vol_spike,
-            }.items() if val is True
-        ]
+            }.items()
+            if val is True
+        ],
     }
 
     # ===============================
     # Score the setup
     # ===============================
     scores = score_signal(features, config)
+    final_score = scores.get("final_score", 0)
+
+    # Read threshold from config (fallback = 50)
+    alert_threshold = config.get("alert_threshold_aggressive", 50)
+
+    print(f"\n📈 Scoring:")
+    print(f"final_score: {final_score}")
+    print(f"alert_threshold_aggressive: {alert_threshold}")
 
     # ===============================
-    # Build test formatted message
+    # Decide if we should send an alert
     # ===============================
-    fake_payload = {
+    if final_score < alert_threshold:
+        print("⚪ Score below threshold → no Telegram alert sent.")
+        return
+
+    # ===============================
+    # Build formatted alert message
+    # ===============================
+    side = "BUY" if ema_align and macd_pos else "NONE"
+
+    payload = {
         "id": "LIVE|TEST|BTC_USDT",
         "symbol": "BTC_USDT",
         "exchange": "MEXC",
         "tf": "5m",
-        "side": "BUY" if ema_align and macd_pos else "NONE",
-        "final_score": scores.get("final_score", 0),
+        "side": side,
+        "final_score": final_score,
         "tags": features["tags"],
     }
 
     text = (
-        "📡 Alt-Scanner Live Check\n"
-        f"Symbol: {fake_payload['symbol']}\n"
-        f"Timeframe: {fake_payload['tf']}\n"
-        f"Score: {fake_payload['final_score']}\n"
-        f"Signal: {fake_payload['side']}\n"
-        f"Tags: {', '.join(fake_payload['tags']) if fake_payload['tags'] else 'None'}\n"
-        f"\nRaw: {json.dumps(fake_payload)}"
+        "📡 Alt-Scanner Live Alert\n"
+        f"Symbol: {payload['symbol']}\n"
+        f"Timeframe: {payload['tf']}\n"
+        f"Score: {payload['final_score']} (threshold={alert_threshold})\n"
+        f"Signal: {payload['side']}\n"
+        f"Tags: {', '.join(payload['tags']) if payload['tags'] else 'None'}\n"
+        f"\nRaw: {json.dumps(payload)}"
     )
 
     send_telegram(text)
