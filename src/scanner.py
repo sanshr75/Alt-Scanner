@@ -13,6 +13,21 @@ from src.indicators import ema, rsi, atr, macd_hist
 from src.scoring import score_signal
 from .mexc_client import fetch_klines
 
+import yaml
+from pathlib import Path
+
+# --- config loading ---
+CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
+
+with open(CONFIG_PATH, "r") as f:
+    CONFIG = yaml.safe_load(f) or {}
+
+SCANNER_CFG = CONFIG.get("scanner", {})
+
+SYMBOLS = SCANNER_CFG.get(
+    "symbols",
+    ["BTC_USDT", "ETH_USDT", "SOL_USDT"]  # fallback if config missing
+)
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 DATA_DIR = BASE_DIR / "data"
