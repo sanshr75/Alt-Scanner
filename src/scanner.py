@@ -13,29 +13,49 @@ from src.indicators import ema, rsi, atr, macd_hist
 from src.scoring import score_signal
 from .mexc_client import fetch_klines
 
-import yaml
-from pathlib import Path
+# --- paths ---
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data"
+CONFIG_PATH = BASE_DIR / "config.yaml"
 
-# --- config loading ---
-CONFIG_PATH = Path(__file__).resolve().parents[1] / "config.yaml"
-
-with open(CONFIG_PATH, "r") as f:
+# --- load config once (global) ---
+with CONFIG_PATH.open("r", encoding="utf-8") as f:
     CONFIG = yaml.safe_load(f) or {}
 
+# scanner-specific config block
 SCANNER_CFG = CONFIG.get("scanner", {})
 
+# symbols list (from config)
 SYMBOLS = SCANNER_CFG.get(
     "symbols",
     ["BTC_USDT", "ETH_USDT", "SOL_USDT"]  # fallback if config missing
 )
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data"
+# timeframes (prefer top-level keys already in config.yaml)
+TF_PRIMARY = CONFIG.get("tf_primary", "5m")
+TF_CONFIRM = CONFIG.get("tf_confirm", "15m")
+
+# volume spike multiplier (prefer scanner.volume.spike_multiplier, fallback to vol_mult)
+VOLUME_CFG = SCANNER_CFG.get("volume", {})
+VOL_SPIKE_MULT = VOLUME_CFG.get("spike_multiplier", CONFIG.get("vol_mult", 1.5))
+
+# ATR multipliers for SL/TP (scanner.atr.* with fallbacks)
+ATR_CFG = SCANNER_CFG.get("atr", {})
+ATR_SL_MULT = ATR_CFG.get("sl_multiplier", 1.5)
+ATR_TP1_MULT = ATR_CFG.get("tp1_multiplier", 2.0)
+ATR_TP2_MULT = ATR_CFG.get("tp2_multiplier", 3.0)
+
+# Alert threshold (scanner.scoring.threshold, fallback to aggressive top-level)
+SCORING_CFG = SCANNER_CFG.get("scoring", {})
+ALERT_THRESHOLD = SCORING_CFG.get(
+    "threshold",
+    CONFIG.get("alert_threshold_aggressive", 65)
+)
 
 
 def load_config():
-    cfg_path = BASE_DIR / "config.yaml"
-    with cfg_path.open("r", encoding="utf-8") as f:
+    # kept for compatibility with other modules
+    with CONFIG_PATH.open("r", encoding="utf-8") as f:
         return yaml.safe_load(f)
 
 
@@ -84,10 +104,10 @@ def log_signal(data: dict):
 
 def compute_tf15_confirm(symbol: str) -> bool:
     """
-    Fetch 15m timeframe and return a simple trend-confirm flag.
+    Fetch confirm timeframe (default 15m) and return a simple trend-confirm flag.
     close > ema20 > ema50 AND macd_hist > 0
     """
-    candles = fetch_klines(symbol, "15m", 50)
+    candles = fetch_klines(symbol, TF_CONFIRM, 50)
 
     candles["ema20"] = ema(candles["close"], 20)
     candles["ema50"] = ema(candles["close"], 50)
@@ -105,7 +125,8 @@ def analyze_symbol(symbol: str, config: dict):
     print(f"\n================= {symbol} =================")
 
     try:
-        candles = fetch_klines(symbol, "5m", 50)
+        # primary timeframe from config (default 5m)
+        candles = fetch_klines(symbol, TF_PRIMARY, 50)
 
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
@@ -118,38 +139,40 @@ def analyze_symbol(symbol: str, config: dict):
         last_atr = float(candles["atr14"].iloc[-1])
         last_close = float(last["close"])
 
-        # Bullish side conditions (5m)
+        # Bullish side conditions (primary tf)
         ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
 
-        # Bearish side conditions (5m)
+        # Bearish side conditions (primary tf)
         ema_down = last["close"] < last["ema20"] < last["ema50"]
         macd_neg = last["macd_hist"] < 0
 
-        vol_spike = last["volume"] > last_vol_sma20 * 1.5
+        # volume spike using config multiplier
+        vol_spike = last["volume"] > last_vol_sma20 * VOL_SPIKE_MULT
 
     except Exception as e:
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # 15m confirmation (bullish only for now)
+    # confirmation timeframe (bullish only for now)
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
-        print(f"⚠ 15m confirm failed for {symbol}: {e}")
+        print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
 
     print(
-        f"🔍 5m → ema_align={ema_align}, macd_pos={macd_pos}, "
+        f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}"
     )
-    print(f"📌 15m confirm (bullish): {tf15_confirm}")
+    print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
 
     # Determine side
     if ema_align and macd_pos:
         side = "BUY"
     elif ema_down and macd_neg:
         side = "SELL"
+        # future: add separate bearish scoring
     else:
         side = "NONE"
 
@@ -190,7 +213,8 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚠ score_signal failed, using base_score only: {e}")
         final_score = base_score
 
-    threshold = config.get("alert_threshold_aggressive", 65)
+    # threshold from scanner.scoring.threshold or config fallback
+    threshold = ALERT_THRESHOLD
 
     print(f"📈 Base score: {base_score}")
     print(f"📈 Final score (after scoring.py): {final_score} / threshold {threshold}")
@@ -202,26 +226,18 @@ def analyze_symbol(symbol: str, config: dict):
     tp1 = None
     tp2 = None
 
-    # BUILD LEVELS depending on side
+    # BUILD LEVELS depending on side using ATR multipliers from config
     if side == "BUY":
-        atr_mult_sl = 1.5
-        atr_mult_tp1 = 2.0
-        atr_mult_tp2 = 3.0
-
         entry = last_close
-        sl = entry - last_atr * atr_mult_sl
-        tp1 = entry + last_atr * atr_mult_tp1
-        tp2 = entry + last_atr * atr_mult_tp2
+        sl = entry - last_atr * ATR_SL_MULT
+        tp1 = entry + last_atr * ATR_TP1_MULT
+        tp2 = entry + last_atr * ATR_TP2_MULT
 
     elif side == "SELL":
-        atr_mult_sl = 1.5
-        atr_mult_tp1 = 2.0
-        atr_mult_tp2 = 3.0
-
         entry = last_close
-        sl = entry + last_atr * atr_mult_sl
-        tp1 = entry - last_atr * atr_mult_tp1
-        tp2 = entry - last_atr * atr_mult_tp2
+        sl = entry + last_atr * ATR_SL_MULT
+        tp1 = entry - last_atr * ATR_TP1_MULT
+        tp2 = entry - last_atr * ATR_TP2_MULT
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
@@ -257,7 +273,7 @@ def analyze_symbol(symbol: str, config: dict):
         )
 
     text = (
-        f"📡 Alert: {symbol} (5m)\n"
+        f"📡 Alert: {symbol} ({TF_PRIMARY})\n"
         f"Side: {side}\n"
         f"Score: {final_score} / {threshold}\n"
         f"{levels_str}"
@@ -272,8 +288,8 @@ def main():
 
     config = load_config()
 
-for symbol in SYMBOLS:
-    analyze_symbol(symbol, config)
+    for symbol in SYMBOLS:
+        analyze_symbol(symbol, config)
 
 
 if __name__ == "__main__":
