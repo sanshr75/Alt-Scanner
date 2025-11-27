@@ -74,13 +74,15 @@ telegram:
     - 5m
     - 15m
 
-  atr:
+    atr:
     sl_multiplier: 1.8
-    tp_multiplier: 2.5
+    tp1_multiplier: 2.0
+    tp2_multiplier: 3.0
 
   volume:
     spike_multiplier: 2.2
 
   scoring:
     threshold: 65
+
 
