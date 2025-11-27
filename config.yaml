@@ -63,3 +63,24 @@ alerts_log: data/alerts.json
 telegram:
   enabled: true
   # bot token & chat id read from env / github secrets
+
+  scanner:
+  symbols:
+    - BTC_USDT
+    - ETH_USDT
+    - SOL_USDT
+
+  timeframes:
+    - 5m
+    - 15m
+
+  atr:
+    sl_multiplier: 1.8
+    tp_multiplier: 2.5
+
+  volume:
+    spike_multiplier: 2.2
+
+  scoring:
+    threshold: 65
+
