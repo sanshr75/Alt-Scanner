@@ -272,10 +272,8 @@ def main():
 
     config = load_config()
 
-    symbols = ["BTC_USDT", "ETH_USDT", "SOL_USDT"]
-
-    for symbol in symbols:
-        analyze_symbol(symbol, config)
+for symbol in SYMBOLS:
+    analyze_symbol(symbol, config)
 
 
 if __name__ == "__main__":
