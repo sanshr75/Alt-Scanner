@@ -294,6 +294,7 @@ def analyze_symbol(symbol: str, config: dict):
         "sl": sl,
         "tp1": tp1,
         "tp2": tp2,
+        "btc_ctx": btc_ctx,
     }
 
     log_signal(record)
