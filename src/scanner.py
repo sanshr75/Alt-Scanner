@@ -120,6 +120,7 @@ def compute_tf15_confirm(symbol: str) -> bool:
 
     return bool(ema_align_15 and macd_pos_15)
 
+
 def compute_btc_context() -> int:
     """
     Simple BTC trend context.
@@ -196,7 +197,7 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
 
-           print(
+    print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}"
     )
