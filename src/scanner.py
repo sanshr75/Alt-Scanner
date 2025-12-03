@@ -94,6 +94,9 @@ def log_signal(data: dict):
         "sl": float(data.get("sl", 0)) if data.get("sl") is not None else None,
         "tp1": float(data.get("tp1", 0)) if data.get("tp1") is not None else None,
         "tp2": float(data.get("tp2", 0)) if data.get("tp2") is not None else None,
+        "btc_ctx": int(data.get("btc_ctx", 0)),
+        "breakout": bool(data.get("breakout", False)),
+        "resistance": float(data.get("resistance", 0)) if data.get("resistance") is not None else None,
     }
 
     with filename.open("a", encoding="utf-8") as f:
@@ -175,6 +178,17 @@ def analyze_symbol(symbol: str, config: dict):
         last_atr = float(candles["atr14"].iloc[-1])
         last_close = float(last["close"])
 
+        # --- simple resistance & breakout detection ---
+        window = 20
+        if len(candles) > window + 1:
+            recent_highs = candles["high"].iloc[-(window + 1):-1]
+            resistance = float(recent_highs.max())
+        else:
+            resistance = float(candles["high"].max())
+
+        min_move_pct = CONFIG.get("min_move_pct", 0.5)
+        breakout = last_close > resistance * (1 + min_move_pct / 100.0)
+
         # Bullish side conditions (primary tf)
         ema_align = last["close"] > last["ema20"] > last["ema50"]
         macd_pos = last["macd_hist"] > 0
@@ -199,9 +213,10 @@ def analyze_symbol(symbol: str, config: dict):
 
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
-        f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}"
+        f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, breakout={breakout}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
+    print(f"📌 resistance: {resistance:.4f}")
 
     # BTC context adjustment
     btc_ctx = compute_btc_context()
@@ -226,6 +241,8 @@ def analyze_symbol(symbol: str, config: dict):
         base_score += 5
     if tf15_confirm:
         base_score += 15
+    if breakout:
+        base_score += 10
 
     # -------- Features for central scoring engine --------
     features_for_scoring = {
@@ -233,6 +250,7 @@ def analyze_symbol(symbol: str, config: dict):
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
+        "breakout": bool(breakout),
         "ctx_adj": btc_ctx,
         "tags": [
             tag
@@ -241,6 +259,7 @@ def analyze_symbol(symbol: str, config: dict):
                 "MACD": macd_pos,
                 "VOL": vol_spike,
                 "TF15": tf15_confirm,
+                "BO": breakout,
             }.items()
             if v
         ],
@@ -295,6 +314,8 @@ def analyze_symbol(symbol: str, config: dict):
         "tp1": tp1,
         "tp2": tp2,
         "btc_ctx": btc_ctx,
+        "breakout": breakout,
+        "resistance": resistance,
     }
 
     log_signal(record)
