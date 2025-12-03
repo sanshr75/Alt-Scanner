@@ -180,16 +180,37 @@ def analyze_symbol(symbol: str, config: dict):
         last_close = float(last["close"])
         last_low = float(last["low"])
 
-        # --- simple resistance & breakout detection ---
+        # --- simple support / resistance & breakout / bounce detection ---
         window = 20
+
+        # resistance from recent highs (ignore the current candle)
         if len(candles) > window + 1:
             recent_highs = candles["high"].iloc[-(window + 1):-1]
             resistance = float(recent_highs.max())
         else:
             resistance = float(candles["high"].max())
 
+        # support from recent lows (ignore the current candle)
+        if len(candles) > window + 1:
+            recent_lows = candles["low"].iloc[-(window + 1):-1]
+            support = float(recent_lows.min())
+        else:
+            support = float(candles["low"].min())
+
         min_move_pct = CONFIG.get("min_move_pct", 0.5)
+
+        # fresh breakout above resistance
         breakout = last_close > resistance * (1 + min_move_pct / 100.0)
+
+        # bounce from support in an uptrend zone (dip near support, close back above)
+        support_zone_low = support
+        support_zone_high = support + last_atr * 0.5
+        bounce_from_support = (
+            last_low <= support_zone_high
+            and last_close > support
+            and not breakout
+        )
+
 
         # simple retest: price dipped near/through resistance and closed back above
         tol_atr_mult = 0.5
@@ -226,10 +247,11 @@ def analyze_symbol(symbol: str, config: dict):
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
-        f"breakout={breakout}, retest={retest}"
+        f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
-    print(f"📌 resistance: {resistance:.4f}")
+    print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
+
 
     # BTC context adjustment
     btc_ctx = compute_btc_context()
@@ -258,6 +280,9 @@ def analyze_symbol(symbol: str, config: dict):
         base_score += 10
     if retest:
         base_score += 10
+    if bounce_from_support:
+        base_score += 10
+
 
     # -------- Features for central scoring engine --------
     features_for_scoring = {
@@ -267,6 +292,7 @@ def analyze_symbol(symbol: str, config: dict):
         "mtf_ema_align": bool(tf15_confirm),
         "breakout": bool(breakout),
         "retest": bool(retest),
+        "bounce_support": bool(bounce_from_support),
         "ctx_adj": btc_ctx,
         "tags": [
             tag
@@ -277,6 +303,7 @@ def analyze_symbol(symbol: str, config: dict):
                 "TF15": tf15_confirm,
                 "BO": breakout,
                 "RT": retest,
+                "BSUP": bounce_from_support,
             }.items()
             if v
         ],
@@ -333,7 +360,9 @@ def analyze_symbol(symbol: str, config: dict):
         "btc_ctx": btc_ctx,
         "breakout": breakout,
         "retest": retest,
+        "bounce_support": bounce_from_support,
         "resistance": resistance,
+        "support": support,
     }
 
     log_signal(record)
