@@ -34,6 +34,7 @@ weights:
   candle: 8
   divergence: 12
   orderbook: 12
+
 mtf_weights:
   ema: 8
   macd: 6
@@ -64,7 +65,7 @@ telegram:
   enabled: true
   # bot token & chat id read from env / github secrets
 
-  scanner:
+scanner:
   symbols:
     - BTC_USDT
     - ETH_USDT
@@ -74,7 +75,7 @@ telegram:
     - 5m
     - 15m
 
-    atr:
+  atr:
     sl_multiplier: 1.8
     tp1_multiplier: 2.0
     tp2_multiplier: 3.0
@@ -84,5 +85,3 @@ telegram:
 
   scoring:
     threshold: 65
-
-
