@@ -180,7 +180,7 @@ def analyze_symbol(symbol: str, config: dict):
         last_close = float(last["close"])
         last_low = float(last["low"])
 
-        # --- simple support / resistance & breakout / bounce detection ---
+        # --- simple support / resistance & breakout / bounce / support-retest detection ---
         window = 20
 
         # resistance from recent highs (ignore the current candle)
@@ -208,6 +208,24 @@ def analyze_symbol(symbol: str, config: dict):
         bounce_from_support = (
             last_low <= support_zone_high
             and last_close > support
+            and not breakout
+        )
+
+        # validated support retest: earlier bounce + current dip holds support again
+        try:
+            recent = candles.iloc[-6:-1]  # last 5 candles before current
+        except Exception:
+            recent = candles.iloc[:-1]
+
+        recent_bounce_mask = (recent["low"] <= support_zone_high) & (recent["close"] > support)
+        had_recent_bounce = bool(recent_bounce_mask.any())
+
+        prev_candle = candles.iloc[-2]
+        support_retest = (
+            had_recent_bounce
+            and last_low <= support_zone_high
+            and last_close > support
+            and last_close >= float(prev_candle["close"])
             and not breakout
         )
 
@@ -247,7 +265,8 @@ def analyze_symbol(symbol: str, config: dict):
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
-        f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}"
+        f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}, "
+        f"support_retest={support_retest}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
     print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
@@ -282,6 +301,9 @@ def analyze_symbol(symbol: str, config: dict):
         base_score += 10
     if bounce_from_support:
         base_score += 10
+    if support_retest:
+        base_score += 12
+
 
 
     # -------- Features for central scoring engine --------
@@ -293,6 +315,7 @@ def analyze_symbol(symbol: str, config: dict):
         "breakout": bool(breakout),
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
+        "support_retest": bool(support_retest),
         "ctx_adj": btc_ctx,
         "tags": [
             tag
@@ -304,6 +327,7 @@ def analyze_symbol(symbol: str, config: dict):
                 "BO": breakout,
                 "RT": retest,
                 "BSUP": bounce_from_support,
+                "SRT": support_retest,
             }.items()
             if v
         ],
@@ -361,6 +385,7 @@ def analyze_symbol(symbol: str, config: dict):
         "breakout": breakout,
         "retest": retest,
         "bounce_support": bounce_from_support,
+        "support_retest": support_retest,
         "resistance": resistance,
         "support": support,
     }
