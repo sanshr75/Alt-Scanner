@@ -96,6 +96,7 @@ def log_signal(data: dict):
         "tp2": float(data.get("tp2", 0)) if data.get("tp2") is not None else None,
         "btc_ctx": int(data.get("btc_ctx", 0)),
         "breakout": bool(data.get("breakout", False)),
+        "retest": bool(data.get("retest", False)),
         "resistance": float(data.get("resistance", 0)) if data.get("resistance") is not None else None,
     }
 
@@ -177,6 +178,7 @@ def analyze_symbol(symbol: str, config: dict):
         last_vol_sma20 = candles["vol_sma20"].iloc[-1]
         last_atr = float(candles["atr14"].iloc[-1])
         last_close = float(last["close"])
+        last_low = float(last["low"])
 
         # --- simple resistance & breakout detection ---
         window = 20
@@ -188,6 +190,16 @@ def analyze_symbol(symbol: str, config: dict):
 
         min_move_pct = CONFIG.get("min_move_pct", 0.5)
         breakout = last_close > resistance * (1 + min_move_pct / 100.0)
+
+        # simple retest: price dipped near/through resistance and closed back above
+        tol_atr_mult = 0.5
+        retest_zone_low = resistance - last_atr * tol_atr_mult
+        retest_zone_high = resistance + last_atr * tol_atr_mult
+        retest = (
+            last_low <= retest_zone_high
+            and last_close >= resistance
+            and not breakout  # treat as post-break pullback, not fresh breakout
+        )
 
         # Bullish side conditions (primary tf)
         ema_align = last["close"] > last["ema20"] > last["ema50"]
@@ -213,7 +225,8 @@ def analyze_symbol(symbol: str, config: dict):
 
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
-        f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, breakout={breakout}"
+        f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
+        f"breakout={breakout}, retest={retest}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
     print(f"📌 resistance: {resistance:.4f}")
@@ -243,6 +256,8 @@ def analyze_symbol(symbol: str, config: dict):
         base_score += 15
     if breakout:
         base_score += 10
+    if retest:
+        base_score += 10
 
     # -------- Features for central scoring engine --------
     features_for_scoring = {
@@ -251,6 +266,7 @@ def analyze_symbol(symbol: str, config: dict):
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
         "breakout": bool(breakout),
+        "retest": bool(retest),
         "ctx_adj": btc_ctx,
         "tags": [
             tag
@@ -260,6 +276,7 @@ def analyze_symbol(symbol: str, config: dict):
                 "VOL": vol_spike,
                 "TF15": tf15_confirm,
                 "BO": breakout,
+                "RT": retest,
             }.items()
             if v
         ],
@@ -315,6 +332,7 @@ def analyze_symbol(symbol: str, config: dict):
         "tp2": tp2,
         "btc_ctx": btc_ctx,
         "breakout": breakout,
+        "retest": retest,
         "resistance": resistance,
     }
 
