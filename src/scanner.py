@@ -120,6 +120,41 @@ def compute_tf15_confirm(symbol: str) -> bool:
 
     return bool(ema_align_15 and macd_pos_15)
 
+def compute_btc_context() -> int:
+    """
+    Simple BTC trend context.
+    Uses EMA fast/slow from config and context weights from config.
+    Returns an integer adjustment for the scoring engine.
+    """
+    try:
+        btc_symbol = "BTC_USDT"
+
+        candles = fetch_klines(btc_symbol, TF_CONFIRM, 50)
+
+        ema_fast_len = CONFIG.get("ema_fast", 20)
+        ema_slow_len = CONFIG.get("ema_slow", 50)
+
+        candles["ema_fast"] = ema(candles["close"], ema_fast_len)
+        candles["ema_slow"] = ema(candles["close"], ema_slow_len)
+
+        last = candles.iloc[-1]
+
+        btc_up = last["close"] > last["ema_fast"] > last["ema_slow"]
+        btc_down = last["close"] < last["ema_fast"] < last["ema_slow"]
+
+        ctx_cfg = CONFIG.get("context", {})
+
+        if btc_up:
+            return int(ctx_cfg.get("btc_align", 0))
+        if btc_down:
+            return int(ctx_cfg.get("btc_oppose", 0))
+
+        return 0
+
+    except Exception as e:
+        print(f"⚠ BTC context failed: {e}")
+        return 0
+
 
 def analyze_symbol(symbol: str, config: dict):
     print(f"\n================= {symbol} =================")
@@ -161,11 +196,15 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
 
-    print(
+       print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
+
+    # BTC context adjustment
+    btc_ctx = compute_btc_context()
+    print(f"📌 BTC context adjustment: {btc_ctx}")
 
     # Determine side
     if ema_align and macd_pos:
@@ -193,7 +232,7 @@ def analyze_symbol(symbol: str, config: dict):
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
-        "ctx_adj": 0,
+        "ctx_adj": btc_ctx,
         "tags": [
             tag
             for tag, v in {
