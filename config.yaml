@@ -40,20 +40,23 @@ mtf_weights:
   macd: 6
   vol: 6
 
-# context adjustments
+# context adjustments (softened for current crypto behavior)
 context:
-  btc_align: 15
-  btc_oppose: -30
-  btc_vol_penalty: -15
-  btcd_fall: 10
-  btcd_rise: -20
-  usdtd_fall: 10
-  usdtd_rise: -40
-  funding_bonus: 8
+  btc_align: 12         # small bonus when BTC trend supports your side
+  btc_oppose: -18       # still a penalty, but not nuclear
+  btc_vol_penalty: -10  # when BTC is very volatile, be a bit cautious
+
+  btcd_fall: 6          # BTC.D falling → mild alt-long boost
+  btcd_rise: -10        # BTC.D rising → mild alt-long penalty
+
+  usdtd_fall: 6         # USDT.D falling → risk-on
+  usdtd_rise: -12       # USDT.D rising → risk-off but not insta-no
+
+  funding_bonus: 5      # small extra bonus when funding aligns with your bias
 
 # thresholds & cooldown
-alert_threshold_aggressive: 65
-alert_threshold_high: 95
+alert_threshold_aggressive: 50   # used as a reference for "aggressive"
+alert_threshold_high: 75        # reference for "safe" profile (manual switch)
 cooldown_minutes: 30
 
 # logging / storage
@@ -77,11 +80,11 @@ scanner:
 
   atr:
     sl_multiplier: 1.8
-    tp1_multiplier: 2.0
-    tp2_multiplier: 3.0
+    tp_multipliers: [2.0, 3.0, 4.5, 6.0]   # TP1→TP4 automatically generated
 
   volume:
     spike_multiplier: 2.2
 
   scoring:
-    threshold: 65
+    threshold: 50   # current mode: aggressive 5m
+
