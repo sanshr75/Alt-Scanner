@@ -23,21 +23,21 @@ atr_len: 14
 min_move_pct: 0.5
 min_move_atr_mult: 0.3
 
-# scoring weights (tune later)
+# scoring weights (tuned for crypto scalping / S-R focus)
 weights:
-  ema_align: 15
-  macd: 10
-  rsi: 10
-  vol_spike: 12
-  breakout: 15
-  retest: 20
-  candle: 8
-  divergence: 12
-  orderbook: 12
+  ema_align: 20      # trend structure is king
+  macd: 12           # momentum confirm, but secondary
+  rsi: 6             # small influence only
+  vol_spike: 10      # volume helps, not mandatory
+  breakout: 22       # strong weight to clean breakouts
+  retest: 22         # equally strong weight to clean retests
+  candle: 6          # keep candle patterns light
+  divergence: 8      # useful but noisy on 5m
+  orderbook: 4       # placeholder / future use, low weight
 
 mtf_weights:
-  ema: 8
-  macd: 6
+  ema: 10            # higher TF structure matters
+  macd: 8
   vol: 6
 
 # context adjustments (softened for current crypto behavior)
@@ -87,4 +87,5 @@ scanner:
 
   scoring:
     threshold: 50   # current mode: aggressive 5m
+
 
