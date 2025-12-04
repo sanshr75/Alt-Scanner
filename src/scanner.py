@@ -179,8 +179,9 @@ def analyze_symbol(symbol: str, config: dict):
         last_atr = float(candles["atr14"].iloc[-1])
         last_close = float(last["close"])
         last_low = float(last["low"])
+        last_high = float(last["high"])
 
-        # --- simple support / resistance & breakout / bounce / support-retest detection ---
+        # --- simple support / resistance & breakout / bounce / support-retest / rejection detection ---
         window = 20
 
         # resistance from recent highs (ignore the current candle)
@@ -229,6 +230,15 @@ def analyze_symbol(symbol: str, config: dict):
             and not breakout
         )
 
+        # fall / rejection from resistance (wick into resistance zone, close back below)
+        resistance_zone_low = resistance - last_atr * 0.5
+        resistance_zone_high = resistance + last_atr * 0.5
+        fall_from_resistance = (
+            last_high >= resistance_zone_low
+            and last_close < resistance
+            and not breakout
+        )
+
 
         # simple retest: price dipped near/through resistance and closed back above
         tol_atr_mult = 0.5
@@ -266,7 +276,7 @@ def analyze_symbol(symbol: str, config: dict):
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
         f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}, "
-        f"support_retest={support_retest}"
+        f"support_retest={support_retest}, fall_resistance={fall_from_resistance}"
     )
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
     print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
@@ -303,10 +313,10 @@ def analyze_symbol(symbol: str, config: dict):
         base_score += 10
     if support_retest:
         base_score += 12
+    if fall_from_resistance:
+        base_score += 10
 
 
-
-    # -------- Features for central scoring engine --------
     features_for_scoring = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
@@ -316,6 +326,7 @@ def analyze_symbol(symbol: str, config: dict):
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
         "support_retest": bool(support_retest),
+        "fall_resistance": bool(fall_from_resistance),
         "ctx_adj": btc_ctx,
         "tags": [
             tag
@@ -328,6 +339,7 @@ def analyze_symbol(symbol: str, config: dict):
                 "RT": retest,
                 "BSUP": bounce_from_support,
                 "SRT": support_retest,
+                "FRES": fall_from_resistance,
             }.items()
             if v
         ],
@@ -386,6 +398,7 @@ def analyze_symbol(symbol: str, config: dict):
         "retest": retest,
         "bounce_support": bounce_from_support,
         "support_retest": support_retest,
+        "fall_resistance": fall_from_resistance,
         "resistance": resistance,
         "support": support,
     }
