@@ -383,6 +383,11 @@ def analyze_symbol(symbol: str, config: dict):
     else:
         sl = None
         tps = []
+        
+    # backward compatibility for tp1 / tp2
+    tp1 = tps[0] if len(tps) > 0 else None
+    tp2 = tps[1] if len(tps) > 1 else None
+
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
