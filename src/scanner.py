@@ -365,18 +365,24 @@ def analyze_symbol(symbol: str, config: dict):
     tp1 = None
     tp2 = None
 
-    # BUILD LEVELS depending on side using ATR multipliers from config
+    # BUILD LEVELS depending on side using dynamic ATR TP multipliers from config
+    atr_cfg = CONFIG.get("atr", {})
+    tp_multipliers = atr_cfg.get("tp_multipliers", [2.0, 3.0])  # fallback if config missing
+    sl_multiplier = atr_cfg.get("sl_multiplier", 1.8)
+
+    entry = last_close
+
     if side == "BUY":
-        entry = last_close
-        sl = entry - last_atr * ATR_SL_MULT
-        tp1 = entry + last_atr * ATR_TP1_MULT
-        tp2 = entry + last_atr * ATR_TP2_MULT
+        sl = entry - last_atr * sl_multiplier
+        tps = [entry + last_atr * m for m in tp_multipliers]
 
     elif side == "SELL":
-        entry = last_close
-        sl = entry + last_atr * ATR_SL_MULT
-        tp1 = entry - last_atr * ATR_TP1_MULT
-        tp2 = entry - last_atr * ATR_TP2_MULT
+        sl = entry + last_atr * sl_multiplier
+        tps = [entry - last_atr * m for m in tp_multipliers]
+
+    else:
+        sl = None
+        tps = []
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
@@ -391,8 +397,7 @@ def analyze_symbol(symbol: str, config: dict):
         "tf15_confirm": tf15_confirm,
         "entry": entry,
         "sl": sl,
-        "tp1": tp1,
-        "tp2": tp2,
+        "tps": tps,
         "btc_ctx": btc_ctx,
         "breakout": breakout,
         "retest": retest,
@@ -415,9 +420,9 @@ def analyze_symbol(symbol: str, config: dict):
         levels_str = (
             f"Entry: {entry:.4f}\n"
             f"SL: {sl:.4f}\n"
-            f"TP1: {tp1:.4f}\n"
-            f"TP2: {tp2:.4f}\n"
         )
+        for i, level in enumerate(tps, start=1):
+            levels_str += f"TP{i}: {level:.4f}\n"
 
     text = (
         f"📡 Alert: {symbol} ({TF_PRIMARY})\n"
