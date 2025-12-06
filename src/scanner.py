@@ -32,6 +32,7 @@ SYMBOLS = SCANNER_CFG.get(
 )
 
 MAX_SYMBOLS_SCAN = CONFIG.get("max_symbols_scan", 200)
+MIN_VOLUME_USD = CONFIG.get("min_volume_usd", 0)
 
 # timeframes (prefer top-level keys already in config.yaml)
 TF_PRIMARY = CONFIG.get("tf_primary", "5m")
@@ -203,6 +204,14 @@ def analyze_symbol(symbol: str, config: dict):
         last_close = float(last["close"])
         last_low = float(last["low"])
         last_high = float(last["high"])
+            # approximate 5m notional liquidity filter (volume_sma20 * price)
+    approx_notional_usd = float(last_vol_sma20) * last_close
+    if approx_notional_usd < MIN_VOLUME_USD:
+        print(
+            f"⚪ {symbol} skipped: low liquidity "
+            f"(~${approx_notional_usd:,.0f} < min_volume_usd={MIN_VOLUME_USD})"
+        )
+        return
 
         # --- simple support / resistance & breakout / bounce / support-retest / rejection detection ---
         window = 20
