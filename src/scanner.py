@@ -36,6 +36,7 @@ MAX_SYMBOLS_SCAN = CONFIG.get("max_symbols_scan", 200)
 # timeframes (prefer top-level keys already in config.yaml)
 TF_PRIMARY = CONFIG.get("tf_primary", "5m")
 TF_CONFIRM = CONFIG.get("tf_confirm", "15m")
+SWING_TFS = CONFIG.get("swing_timeframes", ["30m", "1h"])
 
 # volume spike multiplier (prefer scanner.volume.spike_multiplier, fallback to vol_mult)
 VOLUME_CFG = SCANNER_CFG.get("volume", {})
@@ -92,6 +93,7 @@ def log_signal(data: dict):
         "macd_pos": bool(data.get("macd_pos", False)),
         "vol_spike": bool(data.get("vol_spike", False)),
         "tf15_confirm": bool(data.get("tf15_confirm", False)),
+        "swing_confirm": bool(data.get("swing_confirm", False)),
         "entry": float(data.get("entry", 0)) if data.get("entry") is not None else None,
         "sl": float(data.get("sl", 0)) if data.get("sl") is not None else None,
         "tp1": float(data.get("tp1", 0)) if data.get("tp1") is not None else None,
@@ -126,6 +128,27 @@ def compute_tf15_confirm(symbol: str) -> bool:
     macd_pos_15 = last["macd_hist"] > 0
 
     return bool(ema_align_15 and macd_pos_15)
+
+def compute_swing_confirm(symbol: str) -> bool:
+    """
+    Swing confirmation: require uptrend + positive MACD on all swing_timeframes
+    (e.g. 30m and 1h).
+    """
+    try:
+        for tf in SWING_TFS:
+            candles = fetch_klines(symbol, tf, 50)
+            candles["ema20"] = ema(candles["close"], 20)
+            candles["ema50"] = ema(candles["close"], 50)
+            candles["macd_hist"] = macd_hist(candles["close"])
+            last = candles.iloc[-1]
+            ema_align_tf = last["close"] > last["ema20"] > last["ema50"]
+            macd_pos_tf = last["macd_hist"] > 0
+            if not (ema_align_tf and macd_pos_tf):
+                return False
+        return True
+    except Exception as e:
+        print(f"⚠ swing confirm failed for {symbol}: {e}")
+        return False
 
 
 def compute_btc_context() -> int:
@@ -271,6 +294,9 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
 
+    # swing confirmation (30m + 1h)
+    swing_confirm = compute_swing_confirm(symbol)
+
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
@@ -279,6 +305,7 @@ def analyze_symbol(symbol: str, config: dict):
     )
 
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
+    print(f"📌 Swing confirm (30m+1h): {swing_confirm}")
     print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
 
     # BTC context adjustment
@@ -299,6 +326,7 @@ def analyze_symbol(symbol: str, config: dict):
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
+        "swing_confirm": bool(swing_confirm),
         "breakout": bool(breakout),
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
