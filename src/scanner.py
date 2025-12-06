@@ -160,14 +160,11 @@ def compute_btc_context() -> int:
         print(f"⚠ BTC context failed: {e}")
         return 0
 
-
 def analyze_symbol(symbol: str, config: dict):
     print(f"\n================= {symbol} =================")
-
     try:
         # primary timeframe from config (default 5m)
         candles = fetch_klines(symbol, TF_PRIMARY, 50)
-
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
         candles["macd_hist"] = macd_hist(candles["close"])
@@ -220,8 +217,8 @@ def analyze_symbol(symbol: str, config: dict):
 
         recent_bounce_mask = (recent["low"] <= support_zone_high) & (recent["close"] > support)
         had_recent_bounce = bool(recent_bounce_mask.any())
-
         prev_candle = candles.iloc[-2]
+
         support_retest = (
             had_recent_bounce
             and last_low <= support_zone_high
@@ -238,7 +235,6 @@ def analyze_symbol(symbol: str, config: dict):
             and last_close < resistance
             and not breakout
         )
-
 
         # simple retest: price dipped near/through resistance and closed back above
         tol_atr_mult = 0.5
@@ -278,9 +274,9 @@ def analyze_symbol(symbol: str, config: dict):
         f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}, "
         f"support_retest={support_retest}, fall_resistance={fall_from_resistance}"
     )
+
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
     print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
-
 
     # BTC context adjustment
     btc_ctx = compute_btc_context()
@@ -291,11 +287,11 @@ def analyze_symbol(symbol: str, config: dict):
         side = "BUY"
     elif ema_down and macd_neg:
         side = "SELL"
-        # future: add separate bearish scoring
     else:
         side = "NONE"
 
-     features_for_scoring = {
+    # Features for scoring
+    features_for_scoring = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
@@ -323,6 +319,7 @@ def analyze_symbol(symbol: str, config: dict):
         ],
     }
 
+    # Config-driven scoring
     try:
         scores = score_signal(features_for_scoring, config)
         base_score = int(scores.get("base_score", 0))
@@ -334,7 +331,6 @@ def analyze_symbol(symbol: str, config: dict):
 
     # threshold from scanner.scoring.threshold or config fallback
     threshold = ALERT_THRESHOLD
-
     print(f"📈 Base score: {base_score}")
     print(f"📈 Final score (after scoring.py): {final_score} / threshold {threshold}")
     print(f"📌 Decided side: {side}")
@@ -351,23 +347,19 @@ def analyze_symbol(symbol: str, config: dict):
     sl_multiplier = atr_cfg.get("sl_multiplier", 1.8)
 
     entry = last_close
-
     if side == "BUY":
         sl = entry - last_atr * sl_multiplier
         tps = [entry + last_atr * m for m in tp_multipliers]
-
     elif side == "SELL":
         sl = entry + last_atr * sl_multiplier
         tps = [entry - last_atr * m for m in tp_multipliers]
-
     else:
         sl = None
         tps = []
-        
+
     # backward compatibility for tp1 / tp2
     tp1 = tps[0] if len(tps) > 0 else None
     tp2 = tps[1] if len(tps) > 1 else None
-
 
     record = {
         "timestamp": datetime.utcnow().isoformat(),
