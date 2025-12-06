@@ -204,15 +204,7 @@ def analyze_symbol(symbol: str, config: dict):
         last_close = float(last["close"])
         last_low = float(last["low"])
         last_high = float(last["high"])
-
-    # approximate 5m notional liquidity filter (volume_sma20 * price)
-    approx_notional_usd = float(last_vol_sma20) * last_close
-    if approx_notional_usd < MIN_VOLUME_USD:
-        print(
-            f"⚪ {symbol} skipped: low liquidity "
-            f"(~${approx_notional_usd:,.0f} < min_volume_usd={MIN_VOLUME_USD})"
-        )
-        return
+        
 
     # --- simple support / resistance & breakout / bounce / support-retest / rejection detection ---
     window = 20
