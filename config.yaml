@@ -36,9 +36,10 @@ weights:
   orderbook: 4       # placeholder / future use, low weight
 
 mtf_weights:
-  ema: 10            # higher TF structure matters
+  ema: 10   # higher TF structure matters
   macd: 8
   vol: 6
+  swing: 6  # extra bonus when swing TFs agree
 
 # context adjustments (softened for current crypto behavior)
 context:
@@ -89,6 +90,7 @@ scanner:
 
   scoring:
     threshold: 50   # current mode: aggressive 5m
+
 
 
 
