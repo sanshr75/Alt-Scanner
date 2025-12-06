@@ -341,10 +341,10 @@ def analyze_symbol(symbol: str, config: dict):
     tp1 = None
     tp2 = None
 
-    # BUILD LEVELS depending on side using dynamic ATR TP multipliers from config
-    atr_cfg = CONFIG.get("atr", {})
-    tp_multipliers = atr_cfg.get("tp_multipliers", [2.0, 3.0])  # fallback if config missing
-    sl_multiplier = atr_cfg.get("sl_multiplier", 1.8)
+    # BUILD LEVELS depending on side using dynamic ATR TP multipliers from scanner.atr
+    atr_cfg = SCANNER_CFG.get("atr", {})
+    tp_multipliers = atr_cfg.get("tp_multipliers", [2.0, 3.0, 4.5, 6.0])
+    sl_multiplier = atr_cfg.get("sl_multiplier", ATR_SL_MULT)
 
     entry = last_close
     if side == "BUY":
