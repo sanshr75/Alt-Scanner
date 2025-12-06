@@ -31,6 +31,8 @@ SYMBOLS = SCANNER_CFG.get(
     ["BTC_USDT", "ETH_USDT", "SOL_USDT"]  # fallback if config missing
 )
 
+MAX_SYMBOLS_SCAN = CONFIG.get("max_symbols_scan", 200)
+
 # timeframes (prefer top-level keys already in config.yaml)
 TF_PRIMARY = CONFIG.get("tf_primary", "5m")
 TF_CONFIRM = CONFIG.get("tf_confirm", "15m")
@@ -418,7 +420,8 @@ def main():
 
     config = load_config()
 
-    for symbol in SYMBOLS:
+    symbols_to_scan = SYMBOLS[:MAX_SYMBOLS_SCAN]
+    for symbol in symbols_to_scan:
         analyze_symbol(symbol, config)
 
 
