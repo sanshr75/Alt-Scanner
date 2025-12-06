@@ -189,8 +189,9 @@ def compute_btc_context() -> int:
 
 def analyze_symbol(symbol: str, config: dict):
     print(f"\n================= {symbol} =================")
+
+    # --- primary timeframe analysis (5m by default) ---
     try:
-        # primary timeframe from config (default 5m)
         candles = fetch_klines(symbol, TF_PRIMARY, 50)
         candles["ema20"] = ema(candles["close"], 20)
         candles["ema50"] = ema(candles["close"], 50)
@@ -204,10 +205,9 @@ def analyze_symbol(symbol: str, config: dict):
         last_close = float(last["close"])
         last_low = float(last["low"])
         last_high = float(last["high"])
-        
 
-    # --- simple support / resistance & breakout / bounce / support-retest / rejection detection ---
-    window = 20
+        # --- simple support / resistance & breakout / bounce / support-retest / rejection detection ---
+        window = 20
 
         # resistance from recent highs (ignore the current candle)
         if len(candles) > window + 1:
@@ -289,15 +289,12 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # confirmation timeframe (bullish only for now)
+    # --- confirmation timeframe (15m) ---
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
         print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
-
-    # swing confirmation (30m + 1h)
-    swing_confirm = compute_swing_confirm(symbol)
 
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
@@ -307,7 +304,6 @@ def analyze_symbol(symbol: str, config: dict):
     )
 
     print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
-    print(f"📌 Swing confirm (30m+1h): {swing_confirm}")
     print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
 
     # BTC context adjustment
@@ -322,13 +318,12 @@ def analyze_symbol(symbol: str, config: dict):
     else:
         side = "NONE"
 
-    # Features for scoring
+    # --- features for scoring ---
     features_for_scoring = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
-        "swing_confirm": bool(swing_confirm),
         "breakout": bool(breakout),
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
@@ -352,7 +347,7 @@ def analyze_symbol(symbol: str, config: dict):
         ],
     }
 
-    # Config-driven scoring
+    # --- config-driven scoring ---
     try:
         scores = score_signal(features_for_scoring, config)
         base_score = int(scores.get("base_score", 0))
@@ -362,21 +357,18 @@ def analyze_symbol(symbol: str, config: dict):
         base_score = 0
         final_score = 0
 
-    # threshold from scanner.scoring.threshold or config fallback
     threshold = ALERT_THRESHOLD
     print(f"📈 Base score: {base_score}")
     print(f"📈 Final score (after scoring.py): {final_score} / threshold {threshold}")
     print(f"📌 Decided side: {side}")
 
-    # Default levels = None
+    # --- levels (entry, SL, TPs) ---
     entry = None
     sl = None
-    tp1 = None
-    tp2 = None
+    tps = []
 
-    # BUILD LEVELS depending on side using dynamic ATR TP multipliers from scanner.atr
     atr_cfg = SCANNER_CFG.get("atr", {})
-    tp_multipliers = atr_cfg.get("tp_multipliers", [2.0, 3.0, 4.5, 6.0])
+    tp_multipliers = atr_cfg.get("tp_multipliers", [2.0, 3.0])
     sl_multiplier = atr_cfg.get("sl_multiplier", ATR_SL_MULT)
 
     entry = last_close
@@ -390,7 +382,6 @@ def analyze_symbol(symbol: str, config: dict):
         sl = None
         tps = []
 
-    # backward compatibility for tp1 / tp2
     tp1 = tps[0] if len(tps) > 0 else None
     tp2 = tps[1] if len(tps) > 1 else None
 
@@ -424,7 +415,7 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"⚪ {symbol} below threshold or no direction — no alert.")
         return
 
-    # Alert message with direction
+    # --- alert message ---
     levels_str = ""
     if entry is not None:
         levels_str = (
@@ -443,7 +434,6 @@ def analyze_symbol(symbol: str, config: dict):
     )
 
     send_telegram(text)
-
 
 def main():
     print("🚀 Alt-Scanner Start")
