@@ -11,6 +11,7 @@ def score_signal(features: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, 
         "macd_pos": True,
         "vol_spike": True,
         "mtf_ema_align": True,
+        "swing_confirm": False,
         "breakout": True,
         "retest": False,
         "bounce_support": False,
@@ -41,14 +42,14 @@ def score_signal(features: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, 
     if features.get("vol_spike"):
         base += weights.get("vol_spike", 0)
 
-    # Structure / S-R behaviour (map to breakout / retest weights)
+    # Structure / S-R behaviour
     if features.get("breakout"):
         base += weights.get("breakout", 0)
 
     if features.get("retest"):
         base += weights.get("retest", 0)
 
-    # Treat these as variants of "good S/R interaction" for now
+    # Treat these as S/R variants for now (using same "retest" weight)
     if features.get("bounce_support"):
         base += weights.get("retest", 0)
 
@@ -62,6 +63,9 @@ def score_signal(features: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, 
     mtf = 0
     if features.get("mtf_ema_align"):
         mtf += mtf_weights.get("ema", 0)
+
+    if features.get("swing_confirm"):
+        mtf += mtf_weights.get("swing", 0)
 
     # Context adjustment (BTC trend, etc.)
     ctx = features.get("ctx_adj", 0)
