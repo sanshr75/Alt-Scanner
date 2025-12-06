@@ -295,29 +295,7 @@ def analyze_symbol(symbol: str, config: dict):
     else:
         side = "NONE"
 
-    # -------- Manual base_score (still bullish-weighted for now) --------
-    base_score = 0
-    if ema_align:
-        base_score += 10
-    if macd_pos:
-        base_score += 10
-    if vol_spike:
-        base_score += 5
-    if tf15_confirm:
-        base_score += 15
-    if breakout:
-        base_score += 10
-    if retest:
-        base_score += 10
-    if bounce_from_support:
-        base_score += 10
-    if support_retest:
-        base_score += 12
-    if fall_from_resistance:
-        base_score += 10
-
-
-    features_for_scoring = {
+     features_for_scoring = {
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
@@ -347,10 +325,12 @@ def analyze_symbol(symbol: str, config: dict):
 
     try:
         scores = score_signal(features_for_scoring, config)
+        base_score = int(scores.get("base_score", 0))
         final_score = int(scores.get("final_score", base_score))
     except Exception as e:
-        print(f"⚠ score_signal failed, using base_score only: {e}")
-        final_score = base_score
+        print(f"⚠ score_signal failed, using 0 scores: {e}")
+        base_score = 0
+        final_score = 0
 
     # threshold from scanner.scoring.threshold or config fallback
     threshold = ALERT_THRESHOLD
