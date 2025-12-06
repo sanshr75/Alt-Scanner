@@ -1,8 +1,8 @@
 name: Test Telegram Bot
 
 on:
-  workflow_dispatch:    # still allow manual runs from the Actions tab
-  schedule:             # automatic runs
+  workflow_dispatch:
+  schedule:
     - cron: "*/10 * * * *"
 
 jobs:
