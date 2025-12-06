@@ -98,6 +98,7 @@ def log_signal(data: dict):
         "breakout": bool(data.get("breakout", False)),
         "retest": bool(data.get("retest", False)),
         "resistance": float(data.get("resistance", 0)) if data.get("resistance") is not None else None,
+        "support": float(data.get("support", 0)) if data.get("support") is not None else None,
     }
 
     with filename.open("a", encoding="utf-8") as f:
