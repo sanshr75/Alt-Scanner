@@ -289,12 +289,15 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-    # --- confirmation timeframe (15m) ---
+       # --- confirmation timeframe (15m) ---
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
         print(f"⚠ confirm tf failed for {symbol}: {e}")
         tf15_confirm = False
+
+    # --- swing confirmation (30m + 1h) ---
+    swing_confirm = compute_swing_confirm(symbol)
 
     print(
         f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
@@ -303,8 +306,9 @@ def analyze_symbol(symbol: str, config: dict):
         f"support_retest={support_retest}, fall_resistance={fall_from_resistance}"
     )
 
-    print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
-    print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
+       print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
+       print(f"📌 Swing confirm (30m+1h): {swing_confirm}")
+       print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
 
     # BTC context adjustment
     btc_ctx = compute_btc_context()
@@ -324,6 +328,7 @@ def analyze_symbol(symbol: str, config: dict):
         "macd_pos": bool(macd_pos),
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
+        "swing_confirm": bool(swing_confirm),
         "breakout": bool(breakout),
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
@@ -396,6 +401,7 @@ def analyze_symbol(symbol: str, config: dict):
         "macd_pos": macd_pos,
         "vol_spike": vol_spike,
         "tf15_confirm": tf15_confirm,
+        "swing_confirm": swing_confirm,
         "entry": entry,
         "sl": sl,
         "tps": tps,
