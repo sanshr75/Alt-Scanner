@@ -73,7 +73,9 @@ scanner:
     - BTC_USDT
     - ETH_USDT
     - SOL_USDT
-
+    - XRP_USDT
+    - LINK_USDT
+    - INJ_USDT
   timeframes:
     - 5m
     - 15m
@@ -87,5 +89,6 @@ scanner:
 
   scoring:
     threshold: 50   # current mode: aggressive 5m
+
 
 
