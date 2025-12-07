@@ -289,7 +289,7 @@ def analyze_symbol(symbol: str, config: dict):
         print(f"❌ Fetch error for {symbol}: {e}")
         return
 
-       # --- confirmation timeframe (15m) ---
+    # --- confirmation timeframe (15m) ---
     try:
         tf15_confirm = compute_tf15_confirm(symbol)
     except Exception as e:
@@ -299,17 +299,19 @@ def analyze_symbol(symbol: str, config: dict):
     # --- swing confirmation (30m + 1h) ---
     swing_confirm = compute_swing_confirm(symbol)
 
+    # --- debug prints ---
     print(
-        f"🔍 {TF_PRIMARY} → ema_align={ema_align}, macd_pos={macd_pos}, "
+        f"🔍 {TF_PRIMARY} → "
+        f"ema_align={ema_align}, macd_pos={macd_pos}, "
         f"ema_down={ema_down}, macd_neg={macd_neg}, vol_spike={vol_spike}, "
         f"breakout={breakout}, retest={retest}, bounce_support={bounce_from_support}, "
         f"support_retest={support_retest}, fall_resistance={fall_from_resistance}"
     )
+    print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
+    print(f"📌 Swing confirm (30m+1h): {swing_confirm}")
+    print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
 
-       print(f"📌 {TF_CONFIRM} confirm (bullish): {tf15_confirm}")
-       print(f"📌 Swing confirm (30m+1h): {swing_confirm}")
-       print(f"📌 resistance: {resistance:.4f}, support: {support:.4f}")
-
+    
     # BTC context adjustment
     btc_ctx = compute_btc_context()
     print(f"📌 BTC context adjustment: {btc_ctx}")
