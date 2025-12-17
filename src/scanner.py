@@ -326,11 +326,15 @@ def analyze_symbol(symbol: str, config: dict):
 
     # --- features for scoring ---
     features_for_scoring = {
+        # bullish
         "ema_align": bool(ema_align),
         "macd_pos": bool(macd_pos),
+        # bearish
+        "ema_down": bool(ema_down),
+        "macd_neg": bool(macd_neg),
+        # common
         "vol_spike": bool(vol_spike),
         "mtf_ema_align": bool(tf15_confirm),
-        "swing_confirm": bool(swing_confirm),
         "breakout": bool(breakout),
         "retest": bool(retest),
         "bounce_support": bool(bounce_from_support),
