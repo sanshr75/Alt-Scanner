@@ -28,3 +28,9 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python scanner.py
+          - name: Upload alerts log
+  uses: actions/upload-artifact@v4
+  with:
+    name: alerts-log-${{ github.run_id }}
+    path: data/alerts-*.json
+    if-no-files-found: ignore
