@@ -34,6 +34,12 @@ weights:
   candle: 6          # keep candle patterns light
   divergence: 8      # useful but noisy on 5m
   orderbook: 4       # placeholder / future use, low weight
+  
+  # bearish (short-side equivalents)
+  ema_down: 20
+  macd_neg: 12
+  breakdown: 22
+  retest_short: 22
 
 mtf_weights:
   ema: 10   # higher TF structure matters
@@ -91,6 +97,7 @@ scanner:
 
   scoring:
     threshold: 50   # current mode: aggressive 5m
+
 
 
 
