@@ -1,73 +1,54 @@
 # src/scoring.py
-
 from typing import Dict, Any
 
 
-def score_signal(features: Dict[str, Any], config: Dict[str, Any]) -> Dict[str, Any]:
+def score_signal(
+    features: Dict[str, Any],
+    config: Dict[str, Any],
+    side: str = "BUY",
+) -> Dict[str, Any]:
     """
-    features: dict with computed indicator values and boolean flags, e.g.:
-      {
-        "ema_align": True,
-        "macd_pos": True,
-        "vol_spike": True,
-        "mtf_ema_align": True,
-        "swing_confirm": False,
-        "breakout": True,
-        "retest": False,
-        "bounce_support": False,
-        "support_retest": False,
-        "fall_resistance": False,
-        "ctx_adj": 0,
-        "tags": [...]
-      }
-
-    config: full parsed config.yaml
-
-    returns: dict with keys:
-      final_score, base_score, mtf_score, ctx_adj, tags
+    features: dict with computed indicator values and boolean flags.
+    config: parsed config.yaml
+    side: "BUY" or "SELL" – so we can use bullish vs bearish weights.
     """
 
-    weights = config.get("weights", {}) or {}
-    mtf_weights = config.get("mtf_weights", {}) or {}
+    w = config.get("weights", {})
+    mtfw = config.get("mtf_weights", {})
 
     base = 0
 
-    # Core trend / momentum / volume
-    if features.get("ema_align"):
-        base += weights.get("ema_align", 0)
+    if side == "BUY":
+        # bullish weights
+        if features.get("ema_align"):
+            base += w.get("ema_align", 0)
+        if features.get("macd_pos"):
+            base += w.get("macd", 0)
+        if features.get("vol_spike"):
+            base += w.get("vol_spike", 0)
+        if features.get("breakout"):
+            base += w.get("breakout", 0)
+        if features.get("retest"):
+            base += w.get("retest", 0)
+    else:
+        # bearish weights – short-side equivalents
+        if features.get("ema_down"):
+            base += w.get("ema_down", w.get("ema_align", 0))
+        if features.get("macd_neg"):
+            base += w.get("macd_neg", w.get("macd", 0))
+        if features.get("breakdown"):
+            base += w.get("breakdown", w.get("breakout", 0))
+        if features.get("retest_short"):
+            base += w.get("retest_short", w.get("retest", 0))
+        if features.get("vol_spike"):
+            base += w.get("vol_spike", 0)
 
-    if features.get("macd_pos"):
-        base += weights.get("macd", 0)
-
-    if features.get("vol_spike"):
-        base += weights.get("vol_spike", 0)
-
-    # Structure / S-R behaviour
-    if features.get("breakout"):
-        base += weights.get("breakout", 0)
-
-    if features.get("retest"):
-        base += weights.get("retest", 0)
-
-    # Treat these as S/R variants for now (using same "retest" weight)
-    if features.get("bounce_support"):
-        base += weights.get("retest", 0)
-
-    if features.get("support_retest"):
-        base += weights.get("retest", 0)
-
-    if features.get("fall_resistance"):
-        base += weights.get("retest", 0)
-
-    # Multi-timeframe confirmations
+    # common MTF bonus
     mtf = 0
     if features.get("mtf_ema_align"):
-        mtf += mtf_weights.get("ema", 0)
+        mtf += mtfw.get("ema", 0)
 
-    if features.get("swing_confirm"):
-        mtf += mtf_weights.get("swing", 0)
-
-    # Context adjustment (BTC trend, etc.)
+    # BTC / context adjustment
     ctx = features.get("ctx_adj", 0)
 
     final = base + mtf + ctx
