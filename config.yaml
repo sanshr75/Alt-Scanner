@@ -50,7 +50,7 @@ mtf_weights:
 # context adjustments (softened for current crypto behavior)
 context:
   btc_align: 12         # small bonus when BTC trend supports your side
-  btc_oppose: -18       # still a penalty, but not nuclear
+  btc_oppose: -35       # still a penalty, but not nuclear
   btc_vol_penalty: -10  # when BTC is very volatile, be a bit cautious
 
   btcd_fall: 6          # BTC.D falling → mild alt-long boost
@@ -97,6 +97,7 @@ scanner:
 
   scoring:
     threshold: 50   # current mode: aggressive 5m
+
 
 
 
