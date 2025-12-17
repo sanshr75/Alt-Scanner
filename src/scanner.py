@@ -356,8 +356,8 @@ def analyze_symbol(symbol: str, config: dict):
 
     # --- config-driven scoring ---
     try:
-        scores = score_signal(features_for_scoring, config)
-        base_score = int(scores.get("base_score", 0))
+        scores = score_signal(features_for_scoring, config, side=side)
+        final_score = int(scores.get("final_score", base_score))
         final_score = int(scores.get("final_score", base_score))
     except Exception as e:
         print(f"⚠ score_signal failed, using 0 scores: {e}")
