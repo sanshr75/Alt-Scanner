@@ -8,6 +8,7 @@ on:
 jobs:
   test_send:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -15,7 +16,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.11'
+          python-version: "3.11"
 
       - name: Install dependencies
         run: |
@@ -28,9 +29,10 @@ jobs:
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
         run: |
           python scanner.py
-          - name: Upload alerts log
-  uses: actions/upload-artifact@v4
-  with:
-    name: alerts-log-${{ github.run_id }}
-    path: data/alerts-*.json
-    if-no-files-found: ignore
+
+      - name: Upload alerts log
+        uses: actions/upload-artifact@v4
+        with:
+          name: alerts-log-${{ github.run_id }}
+          path: data/alerts-*.json
+          if-no-files-found: ignore
