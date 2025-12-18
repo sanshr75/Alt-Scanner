@@ -62,17 +62,26 @@ def fetch_future_klines(symbol: str, start_dt: datetime, bars: int) -> pd.DataFr
     resp.raise_for_status()
     raw = resp.json()
 
-    cols = [
-        "open_time", "open", "high", "low", "close", "volume",
-        "close_time", "quote_asset_volume",
-        "number_of_trades", "taker_buy_base_asset_volume",
-        "taker_buy_quote_asset_volume", "ignore",
-    ]
-    df = pd.DataFrame(raw, columns=cols)
-    df["open_time"] = pd.to_datetime(df["open_time"], unit="ms", utc=True)
-    df["high"] = df["high"].astype(float)
-    df["low"] = df["low"].astype(float)
-    df["close"] = df["close"].astype(float)
+    # Do NOT pass a 12‑column header; just build from raw
+    df = pd.DataFrame(raw)
+
+    # Use positional indices like in fetch_klines
+    df[0] = pd.to_datetime(df[0], unit="ms", utc=True)  # open_time
+    df[1] = df[1].astype(float)  # open
+    df[2] = df[2].astype(float)  # high
+    df[3] = df[3].astype(float)  # low
+    df[4] = df[4].astype(float)  # close
+
+    df = df.rename(
+        columns={
+            0: "open_time",
+            1: "open",
+            2: "high",
+            3: "low",
+            4: "close",
+        }
+    )
+
     return df[["open_time", "high", "low", "close"]]
 
 
